@@ -27,6 +27,11 @@ def parse_args():
     parser.add_argument('--bs', type=int, default= 64, help='Batch Size')
     parser.add_argument('--n_epochs', type=int, default= 10, help='Number of Epochs')
     parser.add_argument('--lr', type=float, default= 1e-3, help='Learning Rate')
+    parser.add_argument('--optimizer', type=str, default= 'SGD', help='Optimizer')
+    parser.add_argument('--scheduler', type=str, default= 'cosine', help='Scheduler')
+    parser.add_argument('--step', type=int, default= None, help='Step for the learning rate decay')
+    parser.add_argument('--momentum', type=float, default= 0.9, help='Momentum')
+    parser.add_argument('--w_decay', type=float, default= 1e-4, help='Weight Decay')
     
     args=parser.parse_args()
     return args
@@ -89,34 +94,52 @@ def main():
     model = resnet50(weights=weights)  
     model = model.to(args.device, non_blocking= True)
     
-    #setup optimizer
-    optimizer = optim.Adam(model.parameters(), lr=args.lr)
+    # setup optimizer
+    # TASK: Since we're using pre-trained models, there will need to be a separation between pretraied and re-initialized layers
+    if args.optimizer == 'SGD':
+        optimizer = optim.SGD(
+            params = model.parameters(),
+            lr=args.lr,
+            momentum = args.momentum,
+            weight_decay = args.w_decay
+        )
+    elif args.optimizer == 'Adam':
+        optimizer = optim.Adam(
+            params = model.parameters(),
+            lr=args.lr,
+            weight_decay = args.w_decay,
+        )
+    else:
+        logger.warning('No optimizer specified!')
+        optimizer = None
+        
+    # setup scheduler
+    if args.step is None:
+        args.step = args.n_epochs
+    if args.scheduler_type == 'cosine':
+        scheduler = optim.lr_scheduler.CosineAnneaLingLR(
+            optimizer = optimizer,
+            T_max = args.step - 1, #Maximum number of iterations
+        )
+    elif args.scheduler_type == 'step':
+        scheduler = optim.lr_scheduler.StepLR(
+            optimizer= optimizer,
+            step_size = args.step - 1,
+        )
+    else:
+        logger.warning('No scheduler specified!')
+        scheduler = None    
+        
     
-    # Test and Train for each epoch
-    for epoch in range(args.n_epochs):
-        train_loss , train_accuracy = train_step(args, model,s_train, optimizer, logger)
-        s_test_loss, s_test_accuracy = test_step(args, model,s_test, logger)
-        t_test_loss, t_test_accuracy = test_step(args, model,t_test, logger)
+    # Test and Train over epochs
+    run_epochs(s_train, s_test, 
+               t_train, t_test,
+               model,
+               args,
+               optimizer,
+               scheduler,
+               logger)
 
-        # Log Results
-        logger.info('Epoch: {:d}'.format(args.n_epochs+1))
-        logger.info('\t Source Train loss {:.5f}, Source Train accuracy {:.2f}'.format(train_loss, train_accuracy))
-        logger.info('\t Source Test loss {:.5f}, Source Test accuracy {:.2f}'.format(s_test_loss, s_test_accuracy))
-        logger.info('\t Target Test loss {:.5f}, Target Test accuracy {:.2f}'.format(t_test_loss, t_test_accuracy))
-        logger.info('-----------------------------------------------------------------------')
 
 if __name__ == '__main__':
     main()
-    
-    
-#FUTURE TASKS
-
-    # IMPLEMENT OPTIMIZERS
-    # IMPLEMENT LR SCHEDULERS
-    # IMPLEMENT LOSSES
-    
-    # IMPLEMENT TENSORBOARD
-    
-    # REMOVE CLASSES WITH LESS THAN 50 SAMPLES AND GET REMAINING CLASSES OVER ALL DOMAINS
-    
-    # FINISH UPLOADING DATASETS AND GET ALL STATS
