@@ -62,3 +62,30 @@ def get_mean_std_dataset(args, name_ds):
     mean = np.array(mean).mean(axis=0) # average over batch averages
     std = np.array(std).mean(axis=0) # average over batch stds
     return mean , std
+
+class DeviceDataLoader():
+    """
+    Wrap a dataloader to move data to a device
+    
+    """
+    def __init__(self, dl, device):
+        self.dl = dl
+        self.device = device
+        
+    def __iter__(self):
+        """Yield a batch of data after moving it to device"""
+        for b in self.dl: 
+            yield to_device(b, self.device) #The yield keyword in Python is used to create a generator function that can be used within a for loop,
+
+    def __len__(self):
+        """Number of batches"""
+        return len(self.dl)
+
+def to_device(data, device):
+    """
+    Move tensors to chosen device
+    
+    """
+    if isinstance(data, (list,tuple)):
+        return [to_device(x, device) for x in data]
+    return data.to(device, non_blocking=True)

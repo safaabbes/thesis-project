@@ -19,7 +19,7 @@ dataset_stats = {
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    
+
     parser.add_argument('--device', type=str, default='cuda', help='Computational Device')
     parser.add_argument('--path', type=str, default='/storage/TEV/sabbes/domainnet/', help='Dataset Path')
     parser.add_argument('--source_name', type=str, required=True, help='Source Domain Name')
@@ -76,20 +76,27 @@ def main():
     # Question: in http://ai.bu.edu/M3SDA/ there is a train and test txt file, is that supposed to be used for the split? 
     # if it's the case if we remove some classes would that matter if we followed the split of the txt files anymore?
     s_train, s_test = split_dl(args, source_ds, logger) 
-    t_train, t_test = split_dl(args, target_ds, logger) 
-    
-    #load model
-    weights = ResNet50_Weights.DEFAULT
-    model = resnet50(weights=weights)
+    t_train, t_test = split_dl(args, target_ds, logger)
+     
+    #send data to device
+    s_train = DeviceDataLoader(s_train, args.device)
+    s_test = DeviceDataLoader(s_test, args.device)
+    t_train = DeviceDataLoader(t_train, args.device)
+    t_test = DeviceDataLoader(t_test, args.device)
+        
+    #load model and send it to device
+    weights = ResNet50_Weights.DEFAULT   
+    model = resnet50(weights=weights)  
+    model = model.to(args.device, non_blocking= True)
     
     #setup optimizer
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     
     # Test and Train for each epoch
     for epoch in range(args.n_epochs):
-        train_loss , train_accuracy = train_step(model,s_train, optimizer, logger)
-        s_test_loss, s_test_accuracy = test_step(model,s_test, logger)
-        t_test_loss, t_test_accuracy = test_step(model,t_test, logger)
+        train_loss , train_accuracy = train_step(args, model,s_train, optimizer, logger)
+        s_test_loss, s_test_accuracy = test_step(args, model,s_test, logger)
+        t_test_loss, t_test_accuracy = test_step(args, model,t_test, logger)
 
         # Log Results
         logger.info('Epoch: {:d}'.format(args.n_epochs+1))
@@ -100,3 +107,16 @@ def main():
 
 if __name__ == '__main__':
     main()
+    
+    
+#FUTURE TASKS
+
+    # IMPLEMENT OPTIMIZERS
+    # IMPLEMENT LR SCHEDULERS
+    # IMPLEMENT LOSSES
+    
+    # IMPLEMENT TENSORBOARD
+    
+    # REMOVE CLASSES WITH LESS THAN 50 SAMPLES AND GET REMAINING CLASSES OVER ALL DOMAINS
+    
+    # FINISH UPLOADING DATASETS AND GET ALL STATS

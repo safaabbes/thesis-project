@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 
-def train_step(model, data_loader, optimizer, logger):
+def train_step(args, model, data_loader, optimizer, logger):
   samples = 0.
   cumulative_loss = 0.
   cumulative_accuracy = 0.
@@ -12,8 +12,9 @@ def train_step(model, data_loader, optimizer, logger):
   # iterate over the training set
   for batch_idx in range(len(data_loader)):
     logger.info('Train Batch {} out of {}'.format(batch_idx+1, len(data_loader)))
+    
     data, labels = next(iter(data_loader))
-      
+
     # forward pass
     outputs = model(data)
 
@@ -41,7 +42,7 @@ def train_step(model, data_loader, optimizer, logger):
 
 
 
-def test_step(model, data_loader, logger):
+def test_step(args, model, data_loader, logger):
   samples = 0.
   cumulative_loss = 0.
   cumulative_accuracy = 0.
@@ -53,8 +54,10 @@ def test_step(model, data_loader, logger):
   with torch.no_grad():
 
     # iterate over the test set
-    for batch_idx, (data, labels) in enumerate(data_loader):
-      logger.info('Test Batch {}'.format(batch_idx+1))
+    for batch_idx in range(len(data_loader)):
+    
+      data, labels = next(iter(data_loader))
+      
       # forward pass
       outputs = model(data)
 

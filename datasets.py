@@ -3,6 +3,47 @@ from torch.utils.data import random_split
 from torch.utils.data import DataLoader
 from collections import Counter
 
+def split_dl(args, ds, logger, test_pct=0.2):
+  """
+  This function creates train and test DataLoaders.
+
+  """
+  test_size = int(test_pct * len(ds))
+  train_ds, test_ds = random_split(ds, [len(ds) - test_size, test_size])
+  logger.info('Train Size: {}, Test Size {}'.format(len(train_ds), len(test_ds)))
+
+  # PyTorch Data Loaders
+  train_dl = DataLoader(train_ds, args.bs, shuffle=True)
+  test_dl = DataLoader(test_ds, args.bs*2) #increasing bs since the evaluation that requires less computation (No grad)
+
+  return train_dl, test_dl
+
+class DeviceDataLoader():
+    """
+    Wrap a dataloader to move data to a device
+    
+    """
+    def __init__(self, dl, device):
+        self.dl = dl
+        self.device = device
+        
+    def __iter__(self):
+        """Yield a batch of data after moving it to device"""
+        for b in self.dl: 
+            yield to_device(b, self.device) #The yield keyword in Python is used to create a generator function that can be used within a for loop,
+
+    def __len__(self):
+        """Number of batches"""
+        return len(self.dl)
+
+def to_device(data, device):
+    """
+    Move tensors to chosen device
+    
+    """
+    if isinstance(data, (list,tuple)):
+        return [to_device(x, device) for x in data]
+    return data.to(device, non_blocking=True)
 
 def filter_classes(ds, logger):
   count = dict(Counter(ds.targets))
@@ -27,20 +68,39 @@ def filter_classes(ds, logger):
   
   return classes
 
-def split_dl(args, ds, logger, test_pct=0.2):
-  """
-  This function creates train and test DataLoaders.
+def get_mean_std_dataset(args, name_ds):
+    """ 	
+    function to compute the mean and standard deviation across each channel of the whole dataset
 
-  """
-  test_size = int(test_pct * len(ds))
-  train_ds, test_ds = random_split(ds, [len(ds) - test_size, test_size])
-  logger.info('Train Size: {}, Test Size {}'.format(len(train_ds), len(test_ds)))
+    """
+    root_dir = args.path+ name_ds    #dataset path
+    
+    transforms_list=[transforms.Resize((224, 224)),
+                    transforms.CenterCrop(224),
+                    transforms.ToTensor(),
+    ]
+    
+    dataset = ImageFolder(root=root_dir, transform=transforms.Compose(transforms_list))
+    data_loader = DataLoader(dataset, batch_size=800,shuffle=False) 	# set large batch size to get good approximate of mean, std of full dataset
+    
+    mean = []
+    std = []
 
-  # PyTorch Data Loaders
-  train_dl = DataLoader(train_ds, args.bs, shuffle=True)
-  test_dl = DataLoader(test_ds, args.bs*2) #increasing bs since the evaluation that requires less computation (No grad)
+    for i, data in enumerate(data_loader):
+        # shape is (batch_size, channels, height, width)
+        npy_image = data[0].numpy()
 
-  return train_dl, test_dl
+        # compute mean, std per batch shape (3,) three channels
+        batch_mean = np.mean(npy_image, axis=(0,2,3))
+        batch_std = np.std(npy_image, axis=(0,2,3))
+
+        mean.append(batch_mean)
+        std.append(batch_std)
+
+    # shape (num_iterations, 3) -> (mean across 0th axis) -> shape (3,)
+    mean = np.array(mean).mean(axis=0) # average over batch averages
+    std = np.array(std).mean(axis=0) # average over batch stds
+    return mean , std
 
 
 classes = ['The_Eiffel_Tower', 'The_Great_Wall_of_China', 'The_Mona_Lisa', 'aircraft_carrier', 'airplane', 'alarm_clock',
