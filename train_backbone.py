@@ -1,19 +1,17 @@
 import torch
 import torch.nn.functional as F
 
-
-def training_step(model, data_loader, optimizer):
-
+def train_step(model, data_loader, optimizer, logger):
   samples = 0.
   cumulative_loss = 0.
   cumulative_accuracy = 0.
 
   # set the network to training mode: particularly important when using dropout!
   model.train() 
-
+  
   # iterate over the training set
   for batch_idx in range(len(data_loader)):
-
+    logger.info('Train Batch {} out of {}'.format(batch_idx+1, len(data_loader)))
     data, labels = next(iter(data_loader))
       
     # forward pass
@@ -43,8 +41,7 @@ def training_step(model, data_loader, optimizer):
 
 
 
-def test_step(model, data_loader):
-
+def test_step(model, data_loader, logger):
   samples = 0.
   cumulative_loss = 0.
   cumulative_accuracy = 0.
@@ -57,7 +54,7 @@ def test_step(model, data_loader):
 
     # iterate over the test set
     for batch_idx, (data, labels) in enumerate(data_loader):
-      
+      logger.info('Test Batch {}'.format(batch_idx+1))
       # forward pass
       outputs = model(data)
 

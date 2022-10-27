@@ -1,20 +1,44 @@
 import torch
 from torch.utils.data import random_split
 from torch.utils.data import DataLoader
+from collections import Counter
 
-def split_dl(ds, batch_size, test_pct=0.2):
+
+def filter_classes(ds, logger):
+  count = dict(Counter(ds.targets))
+  
+  filtered_dict = dict()
+  classes = []
+  # Iterate over all the items in dictionary and filter items <50
+  for (key, value) in count.items():
+    # Check if key is even then add pair to new dictionary
+    if value>=50:
+        filtered_dict[key] = value
+        classes.append(ds.classes[key])     
+  
+  logger.info('{} remained classes: {}'.format(len(classes), classes)) 
+  #We have a list of the classes that have more than 50 samples and a dictionary of the index , nb of samples per class
+  
+  #We need to re-create a dataset (?) What would be the best way to remove a class from the dataset already created ?
+  # (implement custom functions on ImageFolder or DatasetFolder library?)
+  
+  # another problem is that we need to select the common remained classes over all the domains before re-creating the classes
+  # for that we could apply this method on every domain and create a final classes list with the intersections of the list
+  
+  return classes
+
+def split_dl(args, ds, logger, test_pct=0.2):
   """
   This function creates train and test DataLoaders.
 
   """
-  random_seed = 76 #random seed insures that we always get the same split so that we always train and test on the same images
-  torch.manual_seed(random_seed)
   test_size = int(test_pct * len(ds))
   train_ds, test_ds = random_split(ds, [len(ds) - test_size, test_size])
+  logger.info('Train Size: {}, Test Size {}'.format(len(train_ds), len(test_ds)))
 
   # PyTorch Data Loaders
-  train_dl = DataLoader(train_ds, batch_size, shuffle=True)
-  test_dl = DataLoader(test_ds, batch_size*2) #We're increasing the batch size since we only use the test dataloader in the evaluation that requires less computation (No grad)
+  train_dl = DataLoader(train_ds, args.bs, shuffle=True)
+  test_dl = DataLoader(test_ds, args.bs*2) #increasing bs since the evaluation that requires less computation (No grad)
 
   return train_dl, test_dl
 

@@ -36,15 +36,14 @@ def get_mean_std_dataset(args, name_ds):
     """
     root_dir = args.path+ name_ds    #dataset path
     
-    transforms_list = [transforms.Resize((224, 224)),
-                transforms.CenterCrop(224),
-                transforms.ToTensor(),
+    transforms_list=[transforms.Resize((224, 224)),
+                    transforms.CenterCrop(224),
+                    transforms.ToTensor(),
     ]
-
-
+    
     dataset = ImageFolder(root=root_dir, transform=transforms.Compose(transforms_list))
     data_loader = DataLoader(dataset, batch_size=800,shuffle=False) 	# set large batch size to get good approximate of mean, std of full dataset
-
+    
     mean = []
     std = []
 
