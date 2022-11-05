@@ -13,9 +13,9 @@
 
 
 ### Important Logs
-- Real:
-      - [x] Expected Train Samples: 16141
-      - [x] Expected Test Samples: 6943
+ Real:
+- [x] Expected Train Samples: 16141
+- [x] Expected Test Samples: 6943
 
 - Clipart:
       - [x] Expected Train Samples: 3707
