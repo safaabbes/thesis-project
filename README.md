@@ -13,21 +13,15 @@
 
 
 ### Important Logs
-      Real:
-- [x] Expected Train Samples: 16141
-- [x] Expected Test Samples: 6943
 
-- Clipart:
-      - [x] Expected Train Samples: 3707
-      - [x] Expected Test Samples: 1616
-
-- Sketch:
-      - [x] Expected Train Samples: 5537
-      - [x] Expected Test Samples: 2399
-
-- Painting:
-      - [ ] Expected Train Samples: 6727
-      - [ ] Expected Test Samples: 2909
+- [x] Expected Real Train Samples: 16141
+- [x] Expected Real Test Samples: 6943
+- [x] Expected Clipart Train Samples: 3707
+- [x] Expected Clipart Test Samples: 1616
+- [x] Expected Sketch Train Samples: 5537
+- [x] Expected Sketch Test Samples: 2399
+- [ ] Expected Painting Train Samples: 6727
+- [ ] Expected Painting Test Samples: 2909
 
 
 
