@@ -3,14 +3,12 @@
 ### TODO List
 
 - [x] Implement dataset of 40 classes
-- [ ] Implement Resnet50
-- [ ] Figure out hyperparameters used by Sentry project
-- [ ] Reproduce source training following the table results of Sentry
+- [x] Test 12 directions on basic resnet50
+- [ ] Test 12 directions on resnet50 with the additions made by Sentry
+- [ ] Explore Tensorboard / Weights and biases and choose which one to use
 - [ ] Analyze possible super-classes of the 40 chosen classes
 - [ ] Search other research papers that used the whole dataset for future approaches
-- [ ] Finish uploading datasets and get all stats
-- [ ] Explore Tensorboard / Weights and biases and choose which one to use
-
+- [ ] divide domainnet (full version) dataset in test/train as provided in the official website
 
 ### Important Logs
 
@@ -20,5 +18,5 @@
 - [x] Expected Clipart Test Samples: 1616
 - [x] Expected Sketch Train Samples: 5537
 - [x] Expected Sketch Test Samples: 2399
-- [ ] Expected Painting Train Samples: 6727
-- [ ] Expected Painting Test Samples: 2909
+- [x] Expected Painting Train Samples: 6727
+- [x] Expected Painting Test Samples: 2909

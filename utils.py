@@ -2,11 +2,20 @@ import logging
 import random
 import numpy as np
 import torch
+from PIL import Image
+import os
 
 random.seed(1234)
 np.random.seed(1234)
 torch.manual_seed(1234)
 torch.cuda.manual_seed(1234)
+
+dataset_stats = {
+  'clipart': ([0.7335894,0.71447897,0.6807669],[0.3542898,0.35537153,0.37871686]),
+  'sketch': ([0.8326851 , 0.82697356, 0.8179188 ],[0.25409684, 0.2565908 , 0.26265645]),
+  'quickdraw': ([0.95249325, 0.95249325, 0.95249325], [0.19320959, 0.19320959, 0.19320959]) ,
+  'real': ([0.6062751 , 0.5892714 , 0.55611473],[0.31526884, 0.3114217 , 0.33154294]) ,
+}
 
 ######################################################################
 ##### Logging utilities
@@ -30,6 +39,83 @@ def setup_logger(file_name=None, logger_name = __name__):
        
      
     return logger
+
+
+######################################################################
+##### Dataset utilities
+######################################################################
+
+def default_loader(path):
+    # open path as file to avoid ResourceWarning (https://github.com/python-pillow/Pillow/issues/835)
+    with open(path, 'rb') as f:
+        with Image.open(f) as img:
+            return img.convert('RGB')
+
+def make_dataset(image_list, labels=None):
+    if labels:
+        len_ = len(image_list)
+        images = [(image_list[i].strip(), labels[i, :]) for i in range(len_)]
+    else:
+        if len(image_list[0].split()) > 2:
+            images = [(val.split()[0], np.array([int(la) for la in val.split()[1:]])) for val in image_list]
+        else:
+            images = [(val.split()[0], int(val.split()[1])) for val in image_list]
+    return images
+
+class ImageList(object):
+    """A generic data loader where the images are arranged in this way: ::
+        root/dog/xxx.png
+        root/dog/xxy.png
+        root/dog/xxz.png
+        root/cat/123.png
+        root/cat/nsdf3.png
+        root/cat/asd932_.png
+    Args:
+        root (string): Root directory path.
+        transform (callable, optional): A function/transform that  takes in an PIL image
+            and returns a transformed version. E.g, ``transforms.RandomCrop``
+        target_transform (callable, optional): A function/transform that takes in the
+            target and transforms it.
+        loader (callable, optional): A function to load an image given its path.
+     Attributes:
+        classes (list): List of the class names.
+        class_to_idx (dict): Dict with items (class_name, class_index).
+        imgs (list): List of (image path, class_index) tuples
+    """
+
+    def __init__(self, image_list, root, transform=None, target_transform=None,
+                 loader=default_loader):
+        imgs = make_dataset(image_list)
+        if len(imgs) == 0:
+            raise(RuntimeError("Found 0 images in subfolders of: " + root + "\n"))
+
+        self.root = root
+        self.data = np.array([os.path.join(self.root, img[0]) for img in imgs])
+        self.labels = np.array([img[1] for img in imgs])
+        self.transform = transform
+        self.target_transform = target_transform
+        self.loader = loader
+
+    def __getitem__(self, index):
+        """
+        Args:
+            index (int): Index
+        Returns:
+            tuple: (image, target) where target is class_index of the target class.
+        """
+        path, target = self.data[index], self.labels[index]
+        path = os.path.join(self.root, path)
+        img = self.loader(path)
+        if self.transform is not None:
+            img = self.transform(img)
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        return img, target, index
+
+    def __len__(self):
+        return len(self.data)
+
 
 
 ######################################################################

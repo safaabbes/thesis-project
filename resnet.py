@@ -3,7 +3,9 @@ import torch.nn as nn
 from torch.nn import init
 import torchvision
 from torchvision import models
+from torchvision.models import resnet50, ResNet50_Weights
 import torch.nn.functional as F
+import numpy as np
 
 np.random.seed(1234)
 torch.manual_seed(1234)
@@ -11,6 +13,16 @@ torch.manual_seed(1234)
 ######################################################################
 ##### SENTRY IMPLEMENTATION
 ######################################################################
+
+
+# We use PyTorch [32] for all experiments. On DomainNet, OfficeHome, and VisDA2017, we modify the standard
+# ResNet50 [18] CNN architecture to a few-shot variant used
+# in recent DA work [9, 37, 45]: we replace the last linear
+# layer with a C− way (for C classes) fully-connected layer
+# with Xavier-initialized weights and no bias. We then L2-
+# normalize activations flowing into this layer and feed its
+# output to a softmax layer with a temperature T = 0.05. We
+# match optimization details to Tan et al. [45]. 
 
 class ResNet50(nn.Module):
 
@@ -21,7 +33,9 @@ class ResNet50(nn.Module):
         self.temperature = temperature       
         self.criterion = nn.CrossEntropyLoss()
         
-        model = models.resnet50(pretrained=True)
+        weights = ResNet50_Weights.DEFAULT   
+        model = resnet50(weights=weights)  
+    
         model.fc = nn.Identity()
         self.conv_params = model
         self.fc_params = nn.Identity()        
@@ -30,18 +44,15 @@ class ResNet50(nn.Module):
         init.xavier_normal_(self.classifier.weight)
         self.classifier.bias.data.zero_()
 
-    def forward(self, x, reverse_grad=False):
+    def forward(self, x):
         # Extract features
         x = self.conv_params(x)
         x = x.view(x.size(0), -1)
         x = x.clone()
-        emb = self.fc_params(x)
-        
-        # Classify  (I DONT UNDERSTAND THIS PART)                                       
-        if reverse_grad: emb = utils.ReverseLayerF.apply(emb)
+        emb = self.fc_params(x)                             
         if self.l2_normalize: emb = F.normalize(emb)
         score = self.classifier(emb) / self.temperature
-        
+      
         return score
 
         
@@ -195,7 +206,8 @@ def resnet50(img_channels=3, pre_trained=False):
 
     if pre_trained:
         print('[i] using pre-trained resnet50')
-        net_source = models.resnet50(pretrained=True)
+        weights = ResNet50_Weights.DEFAULT   
+        net_source = resnet50(weights=weights)  
         for param_source, param_target in zip(net_source.parameters(), net_target.parameters()):
             if param_source.requires_grad:
                 if param_source.shape == param_target.shape:

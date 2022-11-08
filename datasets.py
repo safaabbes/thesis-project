@@ -26,6 +26,8 @@ class DomainNetDataset40:
 
         self.train_transforms = None
         self.test_transforms = None 
+        self.train_size = None
+        self.test_size = None
         self.train_data = None
         self.test_data = None    
 
@@ -35,7 +37,7 @@ class DomainNetDataset40:
         train_dir = '{}/{}/train'.format(self.img_dir,self.name)
         test_dir = '{}/{}/test'.format(self.img_dir,self.name)
         
-        normalize_transform = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        normalize_transform = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]) #taken from sentry but better check this yourself
         
         self.train_transforms = transforms.Compose([
                     transforms.Resize((256,256)),
@@ -57,18 +59,20 @@ class DomainNetDataset40:
 
         self.test_data = ImageFolder(root=test_dir, 
                                 transform=self.test_transforms)
+        
+        self.train_size = len(self.train_data)
+        self.test_size = len(self.test_data)
                                                                                 
         return  self.train_data, self.test_data
 
-    def get_dataloaders(self, num_workers=1, batch_size=128):
+    def get_dataloaders(self, num_workers=4, batch_size=128):
         """Constructs and returns dataloaders
         """
         if not self.train_data: self.get_dataset()
-    
-        self.train_size = len(self.train_data)
 
         train_loader = torch.utils.data.DataLoader(self.train_data, batch_size=batch_size, shuffle=True, num_workers=num_workers)
         test_loader = torch.utils.data.DataLoader(self.test_data, batch_size=batch_size*2) #increasing bs since the evaluation that requires less computation (No grad)
+        # Consider a validation loader in the future
         
         return train_loader, test_loader
 

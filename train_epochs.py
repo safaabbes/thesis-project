@@ -6,6 +6,7 @@ import datetime
 import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 
+
 random.seed(1234)
 torch.manual_seed(1234)
 torch.cuda.manual_seed(1234)
@@ -58,7 +59,7 @@ def train_step(epoch, args, model, data_loader, optimizer, logger, writer):
   
   # iterate over the training set
   n_total_steps = len(data_loader)
-  for batch_idx in range(n_total_steps):
+  for batch_idx in range(len(data_loader)):
     # logger.info('Train Batch {} out of {}'.format(batch_idx+1, len(data_loader)))
     data, labels = next(iter(data_loader))
     # forward pass

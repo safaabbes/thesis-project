@@ -1,6 +1,8 @@
 import os
 import argparse
 import sys
+import pathlib
+import shutil
 
 import torchvision
 from torchvision import transforms 
@@ -15,13 +17,6 @@ from datasets import *
 from train_epochs import *
 # from resnet import *
 
-dataset_stats = {
-  'clipart': ([0.7335894,0.71447897,0.6807669],[0.3542898,0.35537153,0.37871686]),
-  'sketch': ([0.8326851 , 0.82697356, 0.8179188 ],[0.25409684, 0.2565908 , 0.26265645]),
-  'quickdraw': ([0.95249325, 0.95249325, 0.95249325], [0.19320959, 0.19320959, 0.19320959]) ,
-  'real': ([0.6062751 , 0.5892714 , 0.55611473],[0.31526884, 0.3114217 , 0.33154294]) ,
-}
-
 random.seed(1234)
 torch.manual_seed(1234)
 np.random.seed(1234)
@@ -34,7 +29,7 @@ def parse_args():
     parser.add_argument('--exp', type=str, required=True, help='Experiment Number')
     parser.add_argument('--device', type=str, default='cuda', help='Computational Device')
     # Source and target domain
-    parser.add_argument('--path', type=str, default='/storage/TEV/sabbes/domainnet/', help='Dataset Path')
+    parser.add_argument('--path', type=str, default='/storage/TEV/sabbes/domainnet40/', help='Dataset Path')
     parser.add_argument('--source', type=str, required=True, help='Source Domain Name')
     parser.add_argument('--target', type=str, required=True, help='Target Domain Name')
     # Training details	
@@ -65,61 +60,47 @@ def main():
     ################################################################################################################
     #### Setup source data loaders
     ################################################################################################################
-    logger.info('Loading {} dataset as source'.format(args.source))
     
-    source_ds = UDADataset(args.source, is_target=False, img_dir=args.path, batch_size=args.bs)
+    source_ds = DomainNetDataset40(args.source, args.path)
     
-    src_train_dataset, src_val_dataset, src_test_dataset = source_ds.get_dsets()
+    s_train_dl, s_test_dl = source_ds.get_dataloaders(batch_size = args.bs)
     
-    src_train_loader, src_val_loader, src_test_loader, src_train_idx = source_ds.get_loaders()
-
-    num_classes = source_ds.get_num_classes()
+    logger.info('number of train samples of {} dataset: {}'.format(args.source, source_ds.train_size))
+    logger.info('number of test samples of {} dataset: {}'.format(args.source, source_ds.test_size))
     
-    logger.info('Number of source classes: {}'.format(num_classes))
-    logger.info('Len {} Train Dataset: {}'.format(args.source, len(src_train_dataset)))
-    logger.info('Len {} Test Dataset: {}'.format(args.source, len(src_test_dataset)))
+    logger.info('len of {} train dataloader {}'.format(args.source, len(s_train_dl)))
+    logger.info('len of {} test dataloader {}'.format(args.source, len(s_test_dl)))
     
-    #send data to device
-    s_train = DeviceDataLoader(src_train_loader, args.device)
-    s_val = DeviceDataLoader(src_val_loader, args.device)
-    s_test = DeviceDataLoader(src_test_loader, args.device)
-
+    s_train_dl = DeviceDataLoader(s_train_dl, args.device)
+    s_test_dl = DeviceDataLoader(s_test_dl, args.device)
 
     ################################################################################################################
     #### Setup target data loaders
     ################################################################################################################
-
-    logger.info('Loading {} dataset as target'.format(args.target))
+    target_ds = DomainNetDataset40(args.target, args.path)
     
-    target_ds = UDADataset(args.target, is_target=True, img_dir=args.path, batch_size=args.bs)
+    t_train_dl, t_test_dl = target_ds.get_dataloaders(batch_size = args.bs)
     
-    tgt_train_dataset, tgt_val_dataset, tgt_test_dataset = target_ds.get_dsets()
+    logger.info('number of train samples of {} dataset: {}'.format(args.target, target_ds.train_size))
+    logger.info('number of test samples of {} dataset: {}'.format(args.target, target_ds.test_size))
     
-    tgt_train_loader, tgt_val_loader, tgt_test_loader, tgt_train_idx = target_ds.get_loaders()
-
-    num_classes = target_ds.get_num_classes()
+    logger.info('len of {} train dataloader {}'.format(args.target, len(t_train_dl)))
+    logger.info('len of {} test dataloader {}'.format(args.target, len(t_test_dl)))
     
-    logger.info('Number of source classes: {}'.format(num_classes))
-    logger.info('Len {} Train Dataset: {}'.format(args.target, len(tgt_train_dataset)))
-    logger.info('Len {} Test Dataset: {}'.format(args.target, len(tgt_test_dataset)))
+    t_train_dl = DeviceDataLoader(t_train_dl, args.device)
+    t_test_dl = DeviceDataLoader(t_test_dl, args.device)
     
-    #send data to device
-    t_train = DeviceDataLoader(tgt_train_loader, args.device)
-    t_val = DeviceDataLoader(tgt_val_loader, args.device)
-    t_test = DeviceDataLoader(tgt_test_loader, args.device)
-    
-    sys.exit()
- 
     ################################################################################################################
     #### Setup model	 
     ################################################################################################################
        
-    #load model and send it to device
+    # model = ResNet50() 
+    # model = model.to(args.device, non_blocking= True)
+    
+    #load model and send it to device    
     weights = ResNet50_Weights.DEFAULT   
     model = resnet50(weights=weights)  
     model = model.to(args.device, non_blocking= True)
-    # model = resnet50(pre_trained=True)
-    # model = model.to(args.device, non_blocking= True)
     
     # setup optimizer
     # TASK: Since we're using pre-trained models, there will need to be a separation between pretraied and re-initialized layers
@@ -136,6 +117,7 @@ def main():
             lr=args.lr,
             weight_decay = args.w_decay,
         )
+    # ADD OTHER Elif: AdamW
     else:
         logger.warning('No optimizer specified!')
         optimizer = None
@@ -158,8 +140,8 @@ def main():
         scheduler = None    
         
     # Test and Train over epochs
-    run_epochs(s_train, s_test, 
-               t_train, t_test,
+    run_epochs(s_train_dl, s_test_dl, 
+               t_train_dl, t_test_dl,
                model,
                args,
                optimizer,
@@ -170,6 +152,9 @@ def main():
 
 if __name__ == '__main__':
     main()
+    
+    
+    
     
               
     # source_transforms = [transforms.Resize((224, 224)),
