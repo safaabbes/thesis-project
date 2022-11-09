@@ -5,21 +5,37 @@ import time
 import datetime
 import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
-
+import wandb
 
 random.seed(1234)
 torch.manual_seed(1234)
 torch.cuda.manual_seed(1234)
 
 
-def run_epochs(s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, optimizer, scheduler, logger):
-  writer = SummaryWriter(log_dir=os.path.join('../runs', args.exp))  
+
+def run_epochs(s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, optimizer, scheduler, logger):  
+  # Setting Wandb
+  wandb.init(
+      project='testing-sentry-resnet50-source',
+      name=args.exp,
+      config = {
+                "source": args.source,
+                "target": args.target,
+                "learning_rate": args.lr,
+                "epochs": args.n_epochs,
+                "batch_size": args.bs,
+                "optimizer": args.optimizer,
+                "scheduler": args.scheduler,
+                "step": args.step,
+                "w_decay": args.w_decay,
+                "momentum": args.momentum,
+                })
   #set starting time
   since = time.time()
   for epoch in range(args.n_epochs):
-    train_loss , train_accuracy = train_step(epoch, args, model,s_train_dl, optimizer, logger, writer)
-    s_test_loss, s_test_accuracy = test_step(args, model,s_test_dl, logger, writer)
-    t_test_loss, t_test_accuracy = test_step(args, model,t_test_dl, logger, writer)
+    train_loss , train_accuracy = train_step(epoch, args, model,s_train_dl, optimizer, logger)
+    s_test_loss, s_test_accuracy = test_step(args, model,s_test_dl, logger)
+    t_test_loss, t_test_accuracy = test_step(args, model,t_test_dl, logger)
 
     # Log Results
     logger.info('Epoch: {:d}'.format(epoch+1))
@@ -27,30 +43,27 @@ def run_epochs(s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, optimi
     logger.info('\t Source Test loss {:.5f}, Source Test accuracy {:.2f}'.format(s_test_loss, s_test_accuracy))
     logger.info('\t Target Test loss {:.5f}, Target Test accuracy {:.2f}'.format(t_test_loss, t_test_accuracy))
     logger.info('-----------------------------------------------------------------------')
-    
-    # Log to Tensorboard
-  #   writer.add_scalar('Train Loss', train_loss, epoch)
-  #   writer.add_scalar('Train Accuracy', train_accuracy, epoch)
-  #   writer.add_scalar('Source Test Loss', s_test_loss, epoch)
-  #   writer.add_scalar('Source Test Accuracy', s_test_accuracy, epoch)
-  #   writer.add_scalar('Target Test Loss', t_test_loss, epoch)
-  #   writer.add_scalar('Target Test Accuracy', t_test_accuracy, epoch)
-  # writer.add_hparams({'bs': args.bs, 
-  #                     'lr': args.lr }, {
-  #                     'train_acc': train_accuracy,
-  #                     's_test_acc': s_test_accuracy,
-  #                     't_test_acc': t_test_accuracy,
-  #                     })
-    
+  
+    # Log results to Wandb
+    metrics = {"train/train_loss": train_loss, 
+               "train/train_acc": train_accuracy,
+               "s_test/test_loss":s_test_loss,
+               "s_test/test_acc":s_test_accuracy,
+               "t_test/test_loss":t_test_loss,
+               "t_test/test_acc":t_test_accuracy,
+            }
+    wandb.log({**metrics})
+
     # Scheduler Step
     scheduler.step()
   # Log time
   duration = time.time() - since
   logger.info('Training duration: {}'.format(str(datetime.timedelta(seconds=duration))))
+  wandb.finish()
   
 
 
-def train_step(epoch, args, model, data_loader, optimizer, logger, writer):
+def train_step(epoch, args, model, data_loader, optimizer, logger):
   samples = 0.
   cumulative_loss = 0.
   cumulative_accuracy = 0.
@@ -81,13 +94,12 @@ def train_step(epoch, args, model, data_loader, optimizer, logger, writer):
     # Logging update
     if (batch_idx + 1) % 100 == 0:
       logger.info('Epoch [{}/{}], Step[{}/{}], Loss: {:.4f}'.format(epoch+1, args.n_epochs, batch_idx+1,n_total_steps, loss.item()))
-
-
+    
   return cumulative_loss/samples, cumulative_accuracy/samples*100
 
 
 
-def test_step(args, model, data_loader, logger, writer):
+def test_step(args, model, data_loader, logger):
   samples = 0.
   cumulative_loss = 0.
   cumulative_accuracy = 0.

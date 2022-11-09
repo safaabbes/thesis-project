@@ -7,15 +7,14 @@ import shutil
 import torchvision
 from torchvision import transforms 
 from torchvision.datasets import ImageFolder
-from torchvision.models import resnet50, ResNet50_Weights
+# from torchvision.models import resnet50, ResNet50_Weights
 import torch.optim as optim
 import matplotlib.pyplot as plt
-import wandb
 
 from utils import *
 from datasets import *
 from train_epochs import *
-# from resnet import *
+from resnet import *
 
 random.seed(1234)
 torch.manual_seed(1234)
@@ -47,15 +46,12 @@ def parse_args():
 
 def main():
     
-    args = parse_args()
-    
-    # wandb.init(project=args.exp)
-    
+    args = parse_args()    
     path_log= os.path.join('../logs', 'train_{}.log'.format(args.exp))
     logger = setup_logger(path_log)
     
-    for arg, value in vars(args).items():
-        logger.info('{} = {}'.format(arg, value))
+    # for arg, value in vars(args).items():
+    # logger.info('{} = {}'.format(arg, value))
         
     ################################################################################################################
     #### Setup source data loaders
@@ -94,13 +90,13 @@ def main():
     #### Setup model	 
     ################################################################################################################
        
-    # model = ResNet50() 
-    # model = model.to(args.device, non_blocking= True)
+    model = ResNet50() 
+    model = model.to(args.device, non_blocking= True)
     
     #load model and send it to device    
-    weights = ResNet50_Weights.DEFAULT   
-    model = resnet50(weights=weights)  
-    model = model.to(args.device, non_blocking= True)
+    # weights = ResNet50_Weights.DEFAULT   
+    # model = resnet50(weights=weights)  
+    # model = model.to(args.device, non_blocking= True)
     
     # setup optimizer
     # TASK: Since we're using pre-trained models, there will need to be a separation between pretraied and re-initialized layers

@@ -65,7 +65,7 @@ class DomainNetDataset40:
                                                                                 
         return  self.train_data, self.test_data
 
-    def get_dataloaders(self, num_workers=4, batch_size=128):
+    def get_dataloaders(self, num_workers=2, batch_size=128):
         """Constructs and returns dataloaders
         """
         if not self.train_data: self.get_dataset()
