@@ -16,7 +16,7 @@ torch.cuda.manual_seed(1234)
 def run_epochs(s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, optimizer, scheduler, logger):  
   # Setting Wandb
   wandb.init(
-      project='testing-sentry-resnet50-source',
+      project='testing-original-resnet50-source',
       name=args.exp,
       config = {
                 "source": args.source,

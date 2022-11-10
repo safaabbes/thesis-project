@@ -3,7 +3,7 @@
 ### TODO List
 
 - [x] Implement dataset of 40 classes
-- [ ] Test 12 directions on basic resnet50 (Logs obtained but remake with wandb! (another project folder))
+- [x] Test 12 directions on original resnet50 
 - [x] Test 12 directions on resnet50 with the additions made by Sentry
 - [x] Explore Tensorboard / Weights and biases and choose which one to use > Wandb it is
 - [x] Analyze possible super-classes of the 40 chosen classes

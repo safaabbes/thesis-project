@@ -7,7 +7,6 @@ import shutil
 import torchvision
 from torchvision import transforms 
 from torchvision.datasets import ImageFolder
-# from torchvision.models import resnet50, ResNet50_Weights
 import torch.optim as optim
 import matplotlib.pyplot as plt
 
@@ -89,14 +88,18 @@ def main():
     ################################################################################################################
     #### Setup model	 
     ################################################################################################################
-       
-    model = ResNet50() 
+    
+    # Testing with SENTRY's Resnet50
+    # model = SENTRY_ResNet50() 
+    # model = model.to(args.device, non_blocking= True)
+    
+    # Testing with pre-trained Pytorch Resnet50 with fc reinitialized 
+    model = ResNet50(num_classes=40, pre_trained=True)
     model = model.to(args.device, non_blocking= True)
     
-    #load model and send it to device    
-    # weights = ResNet50_Weights.DEFAULT   
-    # model = resnet50(weights=weights)  
-    # model = model.to(args.device, non_blocking= True)
+    ################################################################################################################
+    #### Setup Training	 
+    ################################################################################################################
     
     # setup optimizer
     # TASK: Since we're using pre-trained models, there will need to be a separation between pretraied and re-initialized layers
