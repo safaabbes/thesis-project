@@ -2,6 +2,9 @@
 
 ### TODO List
 
+- [ ] Change accuracy metric and re-train source (and save model!)
+- [ ] Create new model with a branch to classify super-classes
+
 - [x] Implement dataset of 40 classes
 - [x] Test 12 directions on original resnet50 
 - [x] Test 12 directions on resnet50 with the additions made by Sentry

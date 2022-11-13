@@ -57,9 +57,11 @@ def main():
     ################################################################################################################
     
     source_ds = DomainNetDataset40(args.source, args.path)
-    
-    s_train_dl, s_test_dl = source_ds.get_dataloaders(batch_size = args.bs)
-    
+    s_train_ds, s_test_ds = source_ds.get_dataset()
+    s_train_dl, s_test_dl = source_ds.get_dataloaders(train_ds = s_train_ds,
+                                                      test_ds = s_test_ds,
+                                                      batch_size = args.bs)
+        
     logger.info('number of train samples of {} dataset: {}'.format(args.source, source_ds.train_size))
     logger.info('number of test samples of {} dataset: {}'.format(args.source, source_ds.test_size))
     
