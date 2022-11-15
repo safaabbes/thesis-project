@@ -68,15 +68,18 @@ def main():
     logger.info('len of {} train dataloader {}'.format(args.source, len(s_train_dl)))
     logger.info('len of {} test dataloader {}'.format(args.source, len(s_test_dl)))
     
-    s_train_dl = DeviceDataLoader(s_train_dl, args.device)
-    s_test_dl = DeviceDataLoader(s_test_dl, args.device)
+    # s_train_dl = DeviceDataLoader(s_train_dl, args.device)
+    # s_test_dl = DeviceDataLoader(s_test_dl, args.device)
 
     ################################################################################################################
     #### Setup target data loaders
     ################################################################################################################
     target_ds = DomainNetDataset40(args.target, args.path)
     
-    t_train_dl, t_test_dl = target_ds.get_dataloaders(batch_size = args.bs)
+    t_train_ds, t_test_ds = target_ds.get_dataset()
+    t_train_dl, t_test_dl = target_ds.get_dataloaders(train_ds = t_train_ds,
+                                                      test_ds = t_test_ds,
+                                                      batch_size = args.bs)
     
     logger.info('number of train samples of {} dataset: {}'.format(args.target, target_ds.train_size))
     logger.info('number of test samples of {} dataset: {}'.format(args.target, target_ds.test_size))
@@ -84,8 +87,8 @@ def main():
     logger.info('len of {} train dataloader {}'.format(args.target, len(t_train_dl)))
     logger.info('len of {} test dataloader {}'.format(args.target, len(t_test_dl)))
     
-    t_train_dl = DeviceDataLoader(t_train_dl, args.device)
-    t_test_dl = DeviceDataLoader(t_test_dl, args.device)
+    # t_train_dl = DeviceDataLoader(t_train_dl, args.device)
+    # t_test_dl = DeviceDataLoader(t_test_dl, args.device)
     
     ################################################################################################################
     #### Setup model	 
@@ -97,7 +100,7 @@ def main():
     
     # Testing with pre-trained Pytorch Resnet50 with fc reinitialized 
     model = ResNet50(num_classes=40, pre_trained=True)
-    model = model.to(args.device, non_blocking= True)
+    # model = model.to(args.device, non_blocking= True)
     
     ################################################################################################################
     #### Setup Training	 

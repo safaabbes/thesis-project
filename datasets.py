@@ -1,9 +1,6 @@
 import os
 import os.path
-from typing import Any, Callable, cast, Dict, List, Optional, Tuple, Union
-
 from PIL import Image
-
 import copy
 import random
 import torch
@@ -169,6 +166,9 @@ class DomainNetDataset40():
 
 
 
+# target_classes = ["airplane", "ambulance", "apple", "backpack", "banana", "bathtub", "bear", "bed", "bee", "bicycle", "bird", "book", "bridge", 
+#                 "bus", "butterfly", "cake", "calculator", "camera", "car", "cat", "chair", "clock", "cow", "dog", "dolphin", "donut", "drums", 
+#                 "duck", "elephant", "fence", "fork", "horse", "house", "rabbit", "scissors", "sheep", "strawberry", "table", "telephone", "truck"]
 
 # classes = ['The_Eiffel_Tower', 'The_Great_Wall_of_China', 'The_Mona_Lisa', 'aircraft_carrier', 'airplane', 'alarm_clock',
 #  'ambulance', 'angel', 'animal_migration', 'ant', 'anvil', 'apple', 'arm', 'asparagus', 'axe', 'backpack', 'banana',

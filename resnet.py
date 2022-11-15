@@ -150,21 +150,28 @@ class ResNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))  
         self.fc = nn.Linear(in_features=2048, out_features=1000, bias=True)
 
-    def forward(self, x):
+    def forward(self, x, path = 'main'):
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
         x = self.maxpool(x)
         x = self.layer1(x)
         x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
-
-        x = self.avgpool(x)
-        x = x.reshape(x.shape[0], -1)
-        x = self.fc(x)
-
-        return x
+        # main branch
+        if path == 'main':
+            f = self.layer3(x)
+            f = self.layer4(f)
+            f = self.avgpool(f)
+            f = f.reshape(f.shape[0], -1)
+            f = self.fc(f)
+            return f
+        # super-class branch
+        elif path == 'branch':
+            g = self.avgpool(x)
+            g = g.reshape(g.shape[0], -1)
+            g = self.fc(g)
+            return g
+        
 
     def _make_layer(self, Bottleneck, num_residual_blocks, intermediate_channels, stride):
         downsample = None
