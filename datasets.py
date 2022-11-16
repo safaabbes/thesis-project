@@ -6,10 +6,8 @@ import random
 import torch
 from torch.utils.data import random_split
 from torch.utils.data import DataLoader
-from collections import Counter
 from torchvision import transforms 
 from torchvision.datasets import ImageFolder
-from torchvision.transforms import Lambda
 from torch.utils.data import DataLoader
 import numpy as np
 
@@ -74,7 +72,6 @@ def pil_loader(path):
         return img.convert("RGB")
     
 
-
 class ImageDataset(torch.utils.data.Dataset):
     def __init__(self, root, transform):
         self.root = root
@@ -93,12 +90,7 @@ class ImageDataset(torch.utils.data.Dataset):
         sample = pil_loader(path)
         if self.transform is not None:
             sample = self.transform(sample)
-            
-        # Replace targets by class and super-class labels (exp: 0 label for airplane becomes (0,0) for (airplane,transport))
-        # new_targets = add_super_label(self.train_data.targets)
-    
-        # self.train_data.targets = new_targets
-            
+
         return sample, target
 
     def __len__(self) -> int:
@@ -152,19 +144,57 @@ class DomainNetDataset40():
         
         self.train_size = len(self.train_data)
         self.test_size = len(self.test_data)
-
-                                                                               
+              
         return  self.train_data, self.test_data
 
     def get_dataloaders(self, train_ds, test_ds, num_workers=2, batch_size=128):
         """Constructs and returns dataloaders
         """
         train_loader = torch.utils.data.DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-        test_loader = torch.utils.data.DataLoader(test_ds, batch_size=batch_size*2) #increasing bs since the evaluation that requires less computation (No grad)
+        test_loader = torch.utils.data.DataLoader(test_ds, batch_size=batch_size, shuffle=True) 
         
         return train_loader, test_loader
 
 
+
+def reduce_split(ds, pct=0.5):
+
+
+
+  
+  return reduced_ds
+
+
+
+# {'0 - airplane': 148,
+#  '1 - ambulance': 51, 
+#  '2 - apple': 311, 
+#  '3 - backpack': 185, 
+#  '4 - banana': 251, 
+#  '5 - bathtub': 31, 
+#  '6 - bear': 265, 
+#  '7 - bed': 32, 
+#  '8 - bee': 219, 
+#  '9 - bicycle': 137, 
+#  '10 - bird': 155, 
+#  '11 - book': 45, 
+#  '12 - bridge': 329, 
+#  '13 - bus': 78, 
+#  '14 - butterfly': 270, 
+#  '15 - cake': 120, 
+#  '16 - calculator': 8, 
+#  '17 - camera': 109, 
+#  '18 - car': 31, 
+#  '19 - cat': 240, 
+#  '20 - chair': 37, 
+#  '21 - clock': 186, 
+#  '22 - cow': 109, 
+#  '23 - dog': 504, 
+#  '24 - dolphin': 280, 
+#  '25 - donut': 261, 
+#  '26 - drums': 143, 
+#  '27 - duck': 293, 
+#  '28 - elephant': 297, '29 - fence': 34, '30 - fork': 58, '31 - horse': 364, '32 - house': 73, '33 - rabbit': 188, '34 - scissors': 45, '35 - sheep': 233, '36 - strawberry': 371, '37 - table': 72, '38 - telephone': 54, '39 - truck': 110}
 
 # target_classes = ["airplane", "ambulance", "apple", "backpack", "banana", "bathtub", "bear", "bed", "bee", "bicycle", "bird", "book", "bridge", 
 #                 "bus", "butterfly", "cake", "calculator", "camera", "car", "cat", "chair", "clock", "cow", "dog", "dolphin", "donut", "drums", 

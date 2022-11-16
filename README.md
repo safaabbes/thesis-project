@@ -2,8 +2,11 @@
 
 ### TODO List
 
-- [ ] Change accuracy metric and re-train source (and save model!)
-- [ ] Create new model with a branch to classify super-classes
+- [x] Change accuracy metric  
+- [ ] re-train source
+- [x] Create new model with a branch to classify super-classes
+- [x] implement new train steps for the new model
+- [ ] train new architecture
 
 - [x] Implement dataset of 40 classes
 - [x] Test 12 directions on original resnet50 

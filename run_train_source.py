@@ -9,6 +9,8 @@ from torchvision import transforms
 from torchvision.datasets import ImageFolder
 import torch.optim as optim
 import matplotlib.pyplot as plt
+from torch.utils.data import random_split
+import numpy as np
 
 from utils import *
 from datasets import *
@@ -58,18 +60,16 @@ def main():
     
     source_ds = DomainNetDataset40(args.source, args.path)
     s_train_ds, s_test_ds = source_ds.get_dataset()
-    s_train_dl, s_test_dl = source_ds.get_dataloaders(train_ds = s_train_ds,
-                                                      test_ds = s_test_ds,
-                                                      batch_size = args.bs)
-        
-    logger.info('number of train samples of {} dataset: {}'.format(args.source, source_ds.train_size))
-    logger.info('number of test samples of {} dataset: {}'.format(args.source, source_ds.test_size))
+    s_train_dl, s_test_dl = source_ds.get_dataloaders(train_ds = s_train_ds, test_ds = s_test_ds, batch_size = args.bs)
+
+    logger.info('number of train samples of {} dataset: {}'.format(args.source, len(s_train_ds)))
+    logger.info('number of test samples of {} dataset: {}'.format(args.source, len(s_test_ds)))
     
     logger.info('len of {} train dataloader {}'.format(args.source, len(s_train_dl)))
     logger.info('len of {} test dataloader {}'.format(args.source, len(s_test_dl)))
     
-    # s_train_dl = DeviceDataLoader(s_train_dl, args.device)
-    # s_test_dl = DeviceDataLoader(s_test_dl, args.device)
+    s_train_dl = DeviceDataLoader(s_train_dl, args.device)
+    s_test_dl = DeviceDataLoader(s_test_dl, args.device)
 
     ################################################################################################################
     #### Setup target data loaders
@@ -77,18 +77,16 @@ def main():
     target_ds = DomainNetDataset40(args.target, args.path)
     
     t_train_ds, t_test_ds = target_ds.get_dataset()
-    t_train_dl, t_test_dl = target_ds.get_dataloaders(train_ds = t_train_ds,
-                                                      test_ds = t_test_ds,
-                                                      batch_size = args.bs)
-    
-    logger.info('number of train samples of {} dataset: {}'.format(args.target, target_ds.train_size))
-    logger.info('number of test samples of {} dataset: {}'.format(args.target, target_ds.test_size))
+    t_train_dl, t_test_dl = target_ds.get_dataloaders(train_ds = t_train_ds, test_ds = t_test_ds, batch_size = args.bs)
+
+    logger.info('number of train samples of {} dataset: {}'.format(args.target, len(t_train_ds)))
+    logger.info('number of test samples of {} dataset: {}'.format(args.target, len(t_test_ds)))
     
     logger.info('len of {} train dataloader {}'.format(args.target, len(t_train_dl)))
     logger.info('len of {} test dataloader {}'.format(args.target, len(t_test_dl)))
     
-    # t_train_dl = DeviceDataLoader(t_train_dl, args.device)
-    # t_test_dl = DeviceDataLoader(t_test_dl, args.device)
+    t_train_dl = DeviceDataLoader(t_train_dl, args.device)
+    t_test_dl = DeviceDataLoader(t_test_dl, args.device)
     
     ################################################################################################################
     #### Setup model	 
@@ -100,7 +98,7 @@ def main():
     
     # Testing with pre-trained Pytorch Resnet50 with fc reinitialized 
     model = ResNet50(num_classes=40, pre_trained=True)
-    # model = model.to(args.device, non_blocking= True)
+    model = model.to(args.device, non_blocking= True)
     
     ################################################################################################################
     #### Setup Training	 
@@ -141,10 +139,11 @@ def main():
         )
     else:
         logger.warning('No scheduler specified!')
-        scheduler = None    
+        scheduler = None   
         
     # Test and Train over epochs
-    run_epochs(s_train_dl, s_test_dl, 
+    run_epochs(
+               s_train_dl, s_test_dl, 
                t_train_dl, t_test_dl,
                model,
                args,
@@ -160,49 +159,18 @@ if __name__ == '__main__':
     
     
     
-              
-    # source_transforms = [transforms.Resize((224, 224)),
-    #                     #  transforms.CenterCrop(224),
-    #                      transforms.ToTensor(),
-    #                     #  transforms.Normalize(*dataset_stats[args.source_name]),
-    #                      ]
-    # target_transforms = [transforms.Resize((224, 224)),
-    #                     # transforms.CenterCrop(224),
-    #                     transforms.ToTensor(),
-    #                     # transforms.Normalize(*dataset_stats[args.target_name]),
-    #                     ]
+    # REDUCED DATASET FOR DEBUGGING
+    # s_remove_size = int(0.98 * len(s_train_ds))
+    # t_remove_size = int(0.98 * len(s_test_ds))
+    # s_train_ds, _ = random_split(s_train_ds, [len(s_train_ds) - s_remove_size, s_remove_size])  
+    # s_test_ds, _ = random_split(s_test_ds, [len(s_test_ds) - t_remove_size, t_remove_size]) 
+    # s_train_dl = torch.utils.data.DataLoader(s_train_ds, batch_size=args.bs, shuffle=True)
+    # s_test_dl = torch.utils.data.DataLoader(s_test_ds, batch_size=args.bs*2)          
     
-    # img_transform_source = transforms.Compose(source_transforms)
-    # img_transform_target = transforms.Compose(target_transforms)
-    
-    # source_ds = ImageFolder(args.path+args.source_name, img_transform_source)
-    # target_ds = ImageFolder(args.path+args.target_name, img_transform_target)
-    
-    # logger.info('number of {} samples: {}'.format(args.source_name , len(source_ds)))
-    # logger.info('number of {} samples: {}'.format(args.target_name , len(target_ds)))
-    # logger.info('Does the source and target have the same labels?: {}'.format(source_ds.classes == target_ds.classes))
-    
-    # ONGOING TASK: getting all the stats(mean, std) of dataset to normalize, once each one is done save result in dataset_stats
-    # clipart_stats = get_mean_std_dataset(args, 'clipart')                     #DONE
-    # sketch_stats = get_mean_std_dataset(args, 'sketch')                       #DONE
-    # painting_stats = get_mean_std_dataset(args, 'painting')                   #DATASET STILL NOT UPLOADED ON STORAGE
-    # infograph_stats = get_mean_std_dataset(args, 'infograph')                 #DATASET STILL NOT UPLOADED ON STORAGE
-    # quickdraw_stats = get_mean_std_dataset(args, 'quickdraw')                 #DONE
-    # real_stats = get_mean_std_dataset(args, 'real')                           #DONE
- 
-    # ONGOING TASK: removing tasks containing <50 samples
-    # source_ds = filter_classes(source_ds, logger)
-    # one way is that once we figure out the classes to use, we remove the current dataset from storage and unzip only the chosen classes 
-    # we would have to remake the stats but there will be no need to re-implement functions
-    
-    # Create Dataloaders and Split Train / Test
-    # Question: in http://ai.bu.edu/M3SDA/ there is a train and test txt file, is that supposed to be used for the split? 
-    # if it's the case if we remove some classes would that matter if we followed the split of the txt files anymore?
-    # s_train, s_test = split_dl(args, source_ds, logger) 
-    # t_train, t_test = split_dl(args, target_ds, logger)
-    
-    # #send data to device
-    # s_train = DeviceDataLoader(s_train, args.device)
-    # s_test = DeviceDataLoader(s_test, args.device)
-    # t_train = DeviceDataLoader(t_train, args.device)
-    # t_test = DeviceDataLoader(t_test, args.device)
+    # REDUCED DATASET FOR DEBUGGING
+    # s_remove_size = int(0.98 * len(t_train_ds))
+    # t_remove_size = int(0.98 * len(t_test_ds))
+    # t_train_ds, _ = random_split(t_train_ds, [len(t_train_ds) - s_remove_size, s_remove_size])  
+    # t_test_ds, _ = random_split(t_test_ds, [len(t_test_ds) - t_remove_size, t_remove_size]) 
+    # t_train_dl = torch.utils.data.DataLoader(t_train_ds, batch_size=args.bs, shuffle=True)
+    # t_test_dl = torch.utils.data.DataLoader(t_test_ds, batch_size=args.bs*2)        

@@ -4,6 +4,8 @@ import numpy as np
 import torch
 from PIL import Image
 import os
+import matplotlib.pyplot as plt
+import itertools
 
 dataset_stats = {
   'clipart': ([0.7335894,0.71447897,0.6807669],[0.3542898,0.35537153,0.37871686]),
@@ -126,3 +128,48 @@ def get_mean_std_dataset(args, name_ds):
     mean = np.array(mean).mean(axis=0) # average over batch averages
     std = np.array(std).mean(axis=0) # average over batch stds
     return mean , std
+
+
+def plot_confusion_matrix(cm, classes,
+                          normalize=False,
+                          title='Confusion matrix',
+                          cmap=plt.cm.Blues):
+    """
+    This function prints and plots the confusion matrix.
+    Normalization can be applied by setting `normalize=True`.
+    """
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=45)
+    plt.yticks(tick_marks, classes)
+
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        # print("Normalized confusion matrix")
+    # else:
+        # print('Confusion matrix, without normalization')
+
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, cm[i, j],
+                 horizontalalignment="center",
+                 color="white" if cm[i, j] > thresh else "black")
+
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+
+
+def count_nb_per_class(ds , labels):
+    dictionary = dict(Counter(ds.targets))
+    dict2 = dict()
+    for x in dictionary:
+        (y,_) = x
+        dict2[y] = dictionary[x]    
+        
+    data = [[label, val] for (label, val) in zip(labels, dictionary.values())]
+    table = wandb.Table(data=data, columns = ["Classes", "Number of Samples"])
+    wandb.log({"DS" : wandb.plot.bar(table, "Classes",
+                                "Number of Samples", title="DS Set")})
