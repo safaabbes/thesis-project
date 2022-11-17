@@ -149,6 +149,7 @@ class ResNet(nn.Module):
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))  
         self.fc = nn.Linear(in_features=2048, out_features=1000, bias=True)
+        self.fcb = nn.Linear(in_features=2048, out_features=1000, bias=True)
 
     def forward(self, x, path = 'main'):
         x = self.conv1(x)
@@ -169,7 +170,7 @@ class ResNet(nn.Module):
         elif path == 'branch':
             g = self.avgpool(x)
             g = g.reshape(g.shape[0], -1)
-            g = self.fc(g)
+            g = self.fcb(g)
             return g
         
 
@@ -216,7 +217,7 @@ class ResNet(nn.Module):
 
 ######################################################################
 
-def ResNet50(img_channel=3, num_classes=1000, pre_trained=True, progress=True):
+def ResNet50(img_channel=3, num_classes=1000, n_super_classes = 5, pre_trained=True, progress=True):
     model = ResNet(Bottleneck, [3, 4, 6, 3], img_channel, num_classes)
     if pre_trained:
         # Load pre-trained model weights
@@ -225,6 +226,7 @@ def ResNet50(img_channel=3, num_classes=1000, pre_trained=True, progress=True):
         model.load_state_dict(weights.get_state_dict(progress=progress))
         # re-initialize classifier (fc)
         model.fc = nn.Linear(in_features=2048, out_features=num_classes, bias=True)
+        nn.Linear(in_features=2048, out_features=n_super_classes, bias=True) # out-features = nb os super-classes
     return model
 
 def ResNet101(img_channel=3, num_classes=1000):

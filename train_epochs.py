@@ -27,7 +27,7 @@ target_classes = ("airplane", "ambulance", "apple", "backpack", "banana", "batht
 def run_epochs( s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, optimizer, scheduler, logger):  
   # Setting Wandb
   wandb.init(
-      project='Super-Class-Model-ResNet50', #Source-Only-ResNet50 OR Super-Class-Model-ResNet50
+      project='Source-Only-ResNet50', #Source-Only-ResNet50 OR Super-Class-Model-ResNet50
       name=args.exp,
       config = {
                 "source": args.source,
@@ -46,9 +46,9 @@ def run_epochs( s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, optim
   since = time.time()
   for epoch in range(args.n_epochs):
     # OPTION 1: Source-Only Training
-    # train_loss , train_accuracy = source_train_step(epoch, args, model,s_train_dl, optimizer, logger)
+    train_loss , train_accuracy = source_train_step(epoch, args, model,s_train_dl, optimizer, logger)
     # OPTION 2: Multi-Task using super-classes Training
-    train_loss , train_accuracy = new_train_step(epoch, args, model,s_train_dl, t_train_dl, optimizer, logger)
+    # train_loss , train_accuracy = new_train_step(epoch, args, model,s_train_dl, t_train_dl, optimizer, logger)
     # Testing
     s_test_loss, s_test_accuracy, s_per_cls_avg_acc, s_acc_each_cls, s_per_cls_samples, s_cm= test_step(args, model,s_test_dl, logger)
     t_test_loss, t_test_accuracy, t_per_cls_avg_acc, t_acc_each_cls, t_per_cls_samples, t_cm = test_step(args, model,t_test_dl, logger)
