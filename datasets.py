@@ -151,7 +151,7 @@ class DomainNetDataset40():
         """Constructs and returns dataloaders
         """
         train_loader = torch.utils.data.DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-        test_loader = torch.utils.data.DataLoader(test_ds, batch_size=batch_size, shuffle=True) 
+        test_loader = torch.utils.data.DataLoader(test_ds, batch_size=batch_size, shuffle=False) 
         
         return train_loader, test_loader
 

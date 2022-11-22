@@ -11,29 +11,12 @@ np.random.seed(1234)
 torch.manual_seed(1234)
 
 ######################################################################
-##### MultiTask Model IMPLEMENTATION
-######################################################################
-
-
-
-######################################################################
 ##### SENTRY IMPLEMENTATION
 ######################################################################
-
-
-# We use PyTorch [32] for all experiments. On DomainNet, OfficeHome, and VisDA2017, we modify the standard
-# ResNet50 [18] CNN architecture to a few-shot variant used
-# in recent DA work [9, 37, 45]: we replace the last linear
-# layer with a C− way (for C classes) fully-connected layer
-# with Xavier-initialized weights and no bias. We then L2-
-# normalize activations flowing into this layer and feed its
-# output to a softmax layer with a temperature T = 0.05. We
-# match optimization details to Tan et al. [45]. 
-
 class SENTRY_ResNet50(nn.Module):
 
     def __init__(self, num_cls=40, weights_init=None, l2_normalize=True, temperature=0.05):
-        super(ResNet50, self).__init__()
+        super(SENTRY_ResNet50, self).__init__()
         self.num_cls = num_cls
         self.l2_normalize = l2_normalize
         self.temperature = temperature       
@@ -71,7 +54,6 @@ class SENTRY_ResNet50(nn.Module):
 ######################################################################
 ##### ORIGINAL PYTORCH IMPLEMENTATION 
 ######################################################################
-
 class Bottleneck(nn.Module):
     def __init__(
         self, in_channels, intermediate_channels, downsample=None, stride=1
@@ -122,9 +104,108 @@ class Bottleneck(nn.Module):
         x += identity
         x = self.relu(x)
         return x
-
-
+    
 class ResNet(nn.Module):
+    def __init__(self, Bottleneck, layers, image_channels, num_classes):
+        super(ResNet, self).__init__()
+        self.in_channels = 64
+        self.conv1 = nn.Conv2d(image_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.bn1 = nn.BatchNorm2d(64)
+        self.relu = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+
+        # Essentially the entire ResNet architecture are in these 4 lines below
+        self.layer1 = self._make_layer(
+            Bottleneck, layers[0], intermediate_channels=64, stride=1
+        )
+        self.layer2 = self._make_layer(
+            Bottleneck, layers[1], intermediate_channels=128, stride=2
+        )
+        self.layer3 = self._make_layer(
+            Bottleneck, layers[2], intermediate_channels=256, stride=2
+        )
+        self.layer4 = self._make_layer(
+            Bottleneck, layers[3], intermediate_channels=512, stride=2
+        )
+
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))  
+        self.fc = nn.Linear(in_features=2048, out_features=1000, bias=True)
+
+    def forward(self, x, path = 'main'):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+        x = self.layer1(x)
+        x = self.layer2(x)
+        f = self.layer3(x)
+        f = self.layer4(f)
+        f = self.avgpool(f)
+        f = f.reshape(f.shape[0], -1)
+        f = self.fc(f)
+        
+        return f
+
+    def _make_layer(self, Bottleneck, num_residual_blocks, intermediate_channels, stride):
+        downsample = None
+        layers = []
+
+        # Either if we half the input space for ex, 56x56 -> 28x28 (stride=2), or channels changes
+        # we need to adapt the Identity (skip connection) so it will be able to be added
+        # to the layer that's ahead
+        if stride != 1 or self.in_channels != intermediate_channels * 4:
+            downsample = nn.Sequential(
+                nn.Conv2d(
+                    self.in_channels,
+                    intermediate_channels * 4,
+                    kernel_size=1,
+                    stride=stride,
+                    bias=False
+                ),
+                nn.BatchNorm2d(intermediate_channels * 4),
+            )
+
+        layers.append(
+            Bottleneck(self.in_channels, intermediate_channels, downsample, stride)
+        )
+
+        # The expansion size is always 4 for ResNet 50,101,152
+        self.in_channels = intermediate_channels * 4
+
+        # For example for first resnet layer: 256 will be mapped to 64 as intermediate layer,
+        # then finally back to 256. Hence no identity downsample is needed, since stride = 1,
+        # and also same amount of channels.
+        for i in range(num_residual_blocks - 1):
+            layers.append(Bottleneck(self.in_channels, intermediate_channels))
+
+        return nn.Sequential(*layers)
+    
+    def load(self, init_path):
+        net_init_dict = torch.load(init_path, map_location=torch.device('cpu'))
+        self.load_state_dict(net_init_dict)
+
+    def save(self, out_path):
+        torch.save(self.state_dict(), out_path)
+        
+######################################################################
+        
+def ResNet50(img_channel=3, num_classes=1000, n_super_classes = 5, pre_trained=True, progress=True):
+    model = ResNet(Bottleneck, [3, 4, 6, 3], img_channel, num_classes)
+    if pre_trained:
+        # Load pre-trained model weights
+        weights = ResNet50_Weights.DEFAULT
+        # Replace state dict by the pre-trained one
+        model.load_state_dict(weights.get_state_dict(progress=progress))
+        # re-initialize classifier (fc)
+        model.fc = nn.Linear(in_features=2048, out_features=num_classes, bias=True)
+    return model
+
+
+######################################################################
+##### NESTED CLASSIFICATION MODEL IMPLEMENTATION 
+######################################################################
+
+class SuperClassModel(nn.Module):
     def __init__(self, Bottleneck, layers, image_channels, num_classes):
         super(ResNet, self).__init__()
         self.in_channels = 64
@@ -158,7 +239,6 @@ class ResNet(nn.Module):
         x = self.maxpool(x)
         x = self.layer1(x)
         x = self.layer2(x)
-        # main branch
         if path == 'main':
             f = self.layer3(x)
             f = self.layer4(f)
@@ -166,13 +246,15 @@ class ResNet(nn.Module):
             f = f.reshape(f.shape[0], -1)
             f = self.fc(f)
             return f
-        # super-class branch
         elif path == 'branch':
             g = self.avgpool(x)
-            g = g.reshape(g.shape[0], -1)
+            g = f.reshape(g.shape[0], -1)
             g = self.fcb(g)
-            return g
-        
+            return g 
+        else:
+            raise Exception("Error! Incorrect Path Specified")
+            
+            
 
     def _make_layer(self, Bottleneck, num_residual_blocks, intermediate_channels, stride):
         downsample = None
@@ -217,16 +299,19 @@ class ResNet(nn.Module):
 
 ######################################################################
 
-def ResNet50(img_channel=3, num_classes=1000, n_super_classes = 5, pre_trained=True, progress=True):
-    model = ResNet(Bottleneck, [3, 4, 6, 3], img_channel, num_classes)
+def SC_Res50(img_channel=3, num_classes=1000, n_super_classes = 5, pre_trained=True, progress=True):
+    model = SuperClassModel(Bottleneck, [3, 4, 6, 3], img_channel, num_classes)
     if pre_trained:
-        # Load pre-trained model weights
-        weights = ResNet50_Weights.DEFAULT
-        # Replace state dict by the pre-trained one
-        model.load_state_dict(weights.get_state_dict(progress=progress))
+        # Load pre-trained resnet50 weights 
+        source = resnet50(weights=ResNet50_Weights.DEFAULT)
+        #Transfer weights to new model
+        for param_source, param_target in zip(source.parameters(), model.parameters()):
+            if param_source.requires_grad:
+                if param_source.shape == param_target.shape:
+                    param_target.data.copy_(param_source.data)
         # re-initialize classifier (fc)
         model.fc = nn.Linear(in_features=2048, out_features=num_classes, bias=True)
-        nn.Linear(in_features=2048, out_features=n_super_classes, bias=True) # out-features = nb os super-classes
+        model.fcb = nn.Linear(in_features=2048, out_features=n_super_classes, bias=True)
     return model
 
 def ResNet101(img_channel=3, num_classes=1000):
@@ -234,3 +319,7 @@ def ResNet101(img_channel=3, num_classes=1000):
 
 def ResNet152(img_channel=3, num_classes=1000):
     return ResNet(Bottleneck, [3, 8, 36, 3], img_channel, num_classes)
+
+
+
+        

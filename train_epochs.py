@@ -27,7 +27,7 @@ target_classes = ("airplane", "ambulance", "apple", "backpack", "banana", "batht
 def run_epochs( s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, optimizer, scheduler, logger):  
   # Setting Wandb
   wandb.init(
-      project='Source-Only-ResNet50', #Source-Only-ResNet50 OR Super-Class-Model-ResNet50
+      project='SO-ResNet50-16bs-sentry', #Source-Only-ResNet50 OR Super-Class-Model-ResNet50
       name=args.exp,
       config = {
                 "source": args.source,
@@ -76,16 +76,18 @@ def run_epochs( s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, optim
                "t_test/test_avg_acc":t_test_accuracy,
             }
     wandb.log({**metrics})
-    # Plot Confusion Matrix
-    plt.figure(figsize=(50,50))
-    plot_confusion_matrix(s_cm, target_classes)
-    wandb.log({"Source/Confusion Matrix": plt})
-    plt.figure(figsize=(50,50))
-    plot_confusion_matrix(t_cm, target_classes)
-    wandb.log({"Target/Confusion Matrix": plt})
     # Scheduler Step
     scheduler.step()
     
+  # Plot Confusion Matrix
+  plt.figure(figsize=(50,50))
+  plot_confusion_matrix(s_cm, target_classes)
+  wandb.log({"Source/Confusion Matrix": plt})
+  plt.close()
+  plt.figure(figsize=(50,50))
+  plot_confusion_matrix(t_cm, target_classes)
+  wandb.log({"Target/Confusion Matrix": plt})
+  plt.close() 
   # Log time
   duration = time.time() - since
   logger.info('Training duration: {}'.format(str(datetime.timedelta(seconds=duration))))

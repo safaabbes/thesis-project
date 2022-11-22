@@ -33,12 +33,12 @@ def parse_args():
     parser.add_argument('--source', type=str, required=True, help='Source Domain Name')
     parser.add_argument('--target', type=str, required=True, help='Target Domain Name')
     # Training details	
-    parser.add_argument('--bs', type=int, default= 64, help='Batch Size')
-    parser.add_argument('--n_epochs', type=int, default= 10, help='Number of Epochs')
+    parser.add_argument('--bs', type=int, default= 16, help='Batch Size')
+    parser.add_argument('--n_epochs', type=int, default= 25, help='Number of Epochs')
     parser.add_argument('--lr', type=float, default= 1e-3, help='Learning Rate')
     parser.add_argument('--optimizer', type=str, default= 'SGD', help='Optimizer')
     parser.add_argument('--scheduler', type=str, default= 'cosine', help='Scheduler')
-    parser.add_argument('--step', type=int, default= None, help='Step for the learning rate decay')
+    parser.add_argument('--step', type=int, default= 20, help='Step for the learning rate decay')
     parser.add_argument('--momentum', type=float, default= 0.9, help='Momentum')
     parser.add_argument('--w_decay', type=float, default= 1e-4, help='Weight Decay')
     
@@ -50,7 +50,7 @@ def main():
     args = parse_args()    
     path_log= os.path.join('../logs', 'train_{}.log'.format(args.exp))
     logger = setup_logger(path_log)
-    
+
     # for arg, value in vars(args).items():
     # logger.info('{} = {}'.format(arg, value))
         
@@ -93,12 +93,14 @@ def main():
     ################################################################################################################
     
     # Testing with SENTRY's Resnet50
-    # model = SENTRY_ResNet50() 
-    # model = model.to(args.device, non_blocking= True)
+    model = SENTRY_ResNet50() 
+    model = model.to(args.device, non_blocking= True)
+    logger.info('Using SENTRY ResNet50')
     
     # Testing with pre-trained Pytorch Resnet50 with fc reinitialized 
-    model = ResNet50(num_classes=40, pre_trained=True)
-    model = model.to(args.device, non_blocking= True)
+    # model = ResNet50(num_classes=40, pre_trained=True)
+    # model = model.to(args.device, non_blocking= True)
+    # logger.info('Using Normal ResNet50')
     
     ################################################################################################################
     #### Setup Training	 
