@@ -93,14 +93,21 @@ def main():
     ################################################################################################################
     
     # Testing with SENTRY's Resnet50
-    model = SENTRY_ResNet50() 
-    model = model.to(args.device, non_blocking= True)
-    logger.info('Using SENTRY ResNet50')
+    # model = SENTRY_ResNet50() 
+    # model = model.to(args.device, non_blocking= True)
+    # logger.info('Using SENTRY ResNet50')
     
     # Testing with pre-trained Pytorch Resnet50 with fc reinitialized 
     # model = ResNet50(num_classes=40, pre_trained=True)
     # model = model.to(args.device, non_blocking= True)
     # logger.info('Using Normal ResNet50')
+    
+    # Testing New architecture
+    model = SC_Res50(num_classes=40, n_super_classes=5)
+    model = model.to(args.device, non_blocking= True)
+    logger.info('Using New Architecture')
+    
+    
     
     ################################################################################################################
     #### Setup Training	 

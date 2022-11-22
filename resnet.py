@@ -207,7 +207,7 @@ def ResNet50(img_channel=3, num_classes=1000, n_super_classes = 5, pre_trained=T
 
 class SuperClassModel(nn.Module):
     def __init__(self, Bottleneck, layers, image_channels, num_classes):
-        super(ResNet, self).__init__()
+        super(SuperClassModel, self).__init__()
         self.in_channels = 64
         self.conv1 = nn.Conv2d(image_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
@@ -230,7 +230,7 @@ class SuperClassModel(nn.Module):
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))  
         self.fc = nn.Linear(in_features=2048, out_features=1000, bias=True)
-        self.fcb = nn.Linear(in_features=2048, out_features=1000, bias=True)
+        self.fcb = nn.Linear(in_features=512, out_features=1000, bias=True)
 
     def forward(self, x, path = 'main'):
         x = self.conv1(x)
@@ -248,7 +248,7 @@ class SuperClassModel(nn.Module):
             return f
         elif path == 'branch':
             g = self.avgpool(x)
-            g = f.reshape(g.shape[0], -1)
+            g = g.reshape(g.shape[0], -1)
             g = self.fcb(g)
             return g 
         else:
@@ -311,7 +311,7 @@ def SC_Res50(img_channel=3, num_classes=1000, n_super_classes = 5, pre_trained=T
                     param_target.data.copy_(param_source.data)
         # re-initialize classifier (fc)
         model.fc = nn.Linear(in_features=2048, out_features=num_classes, bias=True)
-        model.fcb = nn.Linear(in_features=2048, out_features=n_super_classes, bias=True)
+        model.fcb = nn.Linear(in_features=512, out_features=n_super_classes, bias=True)
     return model
 
 def ResNet101(img_channel=3, num_classes=1000):

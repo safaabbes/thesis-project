@@ -2,8 +2,9 @@
 
 ### TODO List
 
+- [x] Search ways to generate super_classes
 - [x] Change accuracy metric  
-- [ ] re-train source
+- [x] re-train source
 - [x] Create new model with a branch to classify super-classes
 - [x] implement new train steps for the new model
 - [ ] train new architecture
