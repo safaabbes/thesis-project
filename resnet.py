@@ -129,7 +129,7 @@ class ResNet(nn.Module):
         )
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))  
-        self.fc = nn.Linear(in_features=2048, out_features=1000, bias=True)
+        self.classifier = nn.Linear(in_features=2048, out_features=1000, bias=True)
 
     def forward(self, x, path = 'main'):
         x = self.conv1(x)
@@ -142,7 +142,7 @@ class ResNet(nn.Module):
         f = self.layer4(f)
         f = self.avgpool(f)
         f = f.reshape(f.shape[0], -1)
-        f = self.fc(f)
+        f = self.classifier(f)
         
         return f
 
@@ -192,12 +192,15 @@ class ResNet(nn.Module):
 def ResNet50(img_channel=3, num_classes=1000, n_super_classes = 5, pre_trained=True, progress=True):
     model = ResNet(Bottleneck, [3, 4, 6, 3], img_channel, num_classes)
     if pre_trained:
-        # Load pre-trained model weights
-        weights = ResNet50_Weights.DEFAULT
-        # Replace state dict by the pre-trained one
-        model.load_state_dict(weights.get_state_dict(progress=progress))
-        # re-initialize classifier (fc)
-        model.fc = nn.Linear(in_features=2048, out_features=num_classes, bias=True)
+        # Load pre-trained resnet50 weights 
+        source = resnet50(weights=ResNet50_Weights.DEFAULT)
+        #Transfer weights to new model
+        for param_source, param_target in zip(source.parameters(), model.parameters()):
+            if param_source.requires_grad:
+                if param_source.shape == param_target.shape:
+                    param_target.data.copy_(param_source.data)
+        # initialize classifier 
+        model.classifier = nn.Linear(in_features=2048, out_features=num_classes, bias=True)
     return model
 
 

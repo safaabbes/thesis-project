@@ -5,6 +5,8 @@ import torch
 from PIL import Image
 import os
 import matplotlib.pyplot as plt
+import torch.nn.functional as F
+import torch.optim as optim
 import itertools
 
 dataset_stats = {
@@ -13,6 +15,86 @@ dataset_stats = {
   'quickdraw': ([0.95249325, 0.95249325, 0.95249325], [0.19320959, 0.19320959, 0.19320959]) ,
   'real': ([0.6062751 , 0.5892714 , 0.55611473],[0.31526884, 0.3114217 , 0.33154294]) ,
 }
+
+######################################################################
+##### Train/Test utilities
+######################################################################
+
+def get_num_correct(preds, labels):
+  return preds.argmax(dim=1).eq(labels).sum().item()
+
+def test_step(args, model, data_loader, logger):
+  nb_samples = 0
+  cumulative_loss = 0.
+  total_correct = 0
+  all_preds = torch.tensor([], dtype = torch.int).to(args.device) #for the confusion matrix
+  all_true = torch.tensor([], dtype = torch.int).to(args.device) #for the confusion matrix
+  # set the network to evaluation mode
+  model.eval() 
+  logger.info("Start Testing")
+  # disable gradient computation (we are only testing, we do not want our model to be modified in this step!)
+  with torch.no_grad():
+    # iterate over the test set
+    for batch in data_loader:
+      # logger.info('Test Batch {} out of {}'.format(batch_idx+1, len(data_loader)))
+      data, (labels, _ ) = batch
+      # forward pass
+      preds = model(data)
+      # Compute loss
+      loss = F.cross_entropy(preds,labels)
+      # update cumulative values
+      nb_samples += data.shape[0]
+      total_correct += get_num_correct(preds, labels)
+      # Save predictions
+      all_preds = torch.cat((all_preds, preds.argmax(dim=1).int()), dim=0)
+      all_true = torch.cat((all_true, labels.int()), dim=0)
+  
+    # Compute average accuracy
+    average_accuracy = total_correct / nb_samples * 100
+    # Confusion Matrix
+    all_preds = all_preds.tolist()
+    all_true = all_true.tolist()
+    cm = np.zeros((40,40), dtype = np.int)
+    for i,j in zip(all_true, all_preds,):
+      cm[i,j] += 1
+    # Compute Per-Class Average Accuracy (Used in COAL PAPER)
+    per_cls_acc_vec = cm.diagonal() / cm.sum(axis=1) * 100  
+    per_cls_avg_acc = per_cls_acc_vec.mean()
+    # per_cls_acc_list = { i: np.round(per_cls_acc_vec[i], 2) for i in range(len(per_cls_acc_vec))}
+    # per_cls_samples = { i: cm[i,:].sum() for i in range(len(target_classes))}
+
+  return average_accuracy, per_cls_avg_acc, cm
+
+######################################################################
+##### Optimization utilities
+######################################################################
+
+def generate_optimizer(model, args):
+	param_list = []
+	lr = args.lr 
+	wd = args.wd 
+	if args.optimizer == 'Adam':
+		optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=wd, betas=(0.9, 0.999))
+	elif args.optimizer == 'SGD':
+		for key, value in dict(model.named_parameters()).items():
+			if value.requires_grad:
+				if 'classifier' not in key:
+					param_list += [{'params': [value], 'lr': lr*0.1, 'weight_decay': wd}]
+				else:
+					param_list += [{'params': [value], 'lr': lr, 'weight_decay': wd}]
+
+		optimizer = optim.SGD(param_list, momentum=0.9, weight_decay=wd, nesterov=True)
+	else: raise NotImplementedError
+	return optimizer
+
+def inv_lr_scheduler(param_lr, optimizer, iter_num, gamma=0.0001, power=0.75, init_lr=0.001):
+	"""
+	Decay learning rate
+	"""	
+	for i, param_group in enumerate(optimizer.param_groups):
+		lr = param_lr[i] * (1 + gamma * iter_num) ** (- power)
+		param_group['lr'] = lr
+	return optimizer
 
 ######################################################################
 ##### Logging utilities

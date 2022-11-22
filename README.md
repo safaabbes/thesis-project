@@ -2,6 +2,12 @@
 
 ### TODO List
 
+- [ ] Check Sentry Paper/ Code for more implementation details of the source-only
+- [ ] add checkpoint after 5 epochs
+- [ ] re-train keeping the batch size and hyperparameters used by the other papers (gidhom bithabt maa delil 3la kol choix belehi)
+- [ ] check number of samples used for both dataset in the training (bech tchouf ken idour 3al dataset lkol wela i9oss 3lihom)
+- [ ] output accuracies for branches
+
 - [x] Search ways to generate super_classes
 - [x] Change accuracy metric  
 - [x] re-train source
