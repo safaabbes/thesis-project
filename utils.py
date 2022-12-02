@@ -8,6 +8,19 @@ import matplotlib.pyplot as plt
 import torch.nn.functional as F
 import torch.optim as optim
 import itertools
+import seaborn as sns
+from sklearn.metrics import confusion_matrix
+cluster_sorted_labels = [6, 8, 10, 14, 19, 22, 23, 24, 27, 28, 31, 33, 35,   #There is no label 1000 so it would be a null line to seperate
+                         2, 4, 15, 25, 36,
+                         0, 1, 9, 13, 18, 39,
+                         3, 5, 7, 11, 16, 17, 20, 21, 26, 29, 30, 34, 37, 38,
+                         12, 32]
+
+cluster_sorted_classes = ['bear', 'bee', 'bird', 'butterfly', 'cat', 'cow', 'dog', 'dolphin', 'duck', 'elephant', 'horse', 'rabbit', 'sheep',
+           'apple', 'banana', 'cake', 'donut', 'strawberry',
+           'airplane', 'ambulance', 'bicycle', 'bus', 'car', 'truck',
+           'backpack', 'bathtub', 'bed', 'book', 'calculator', 'camera', 'chair', 'clock', 'drums', 'fence', 'fork', 'scissors', 'table', 'telephone',
+           'bridge', 'house']
 
 dataset_stats = {
   'clipart': ([0.7335894,0.71447897,0.6807669],[0.3542898,0.35537153,0.37871686]),
@@ -44,26 +57,37 @@ def test_step(args, model, data_loader, logger):
       loss = F.cross_entropy(preds,labels)
       # update cumulative values
       nb_samples += data.shape[0]
+      cumulative_loss += loss.item()
       total_correct += get_num_correct(preds, labels)
       # Save predictions
       all_preds = torch.cat((all_preds, preds.argmax(dim=1).int()), dim=0)
       all_true = torch.cat((all_true, labels.int()), dim=0)
   
+    # Compute average loss
+    average_loss = cumulative_loss / nb_samples
     # Compute average accuracy
     average_accuracy = total_correct / nb_samples * 100
     # Confusion Matrix
     all_preds = all_preds.tolist()
     all_true = all_true.tolist()
-    cm = np.zeros((40,40), dtype = np.int)
-    for i,j in zip(all_true, all_preds,):
-      cm[i,j] += 1
+    cm_acc = confusion_matrix( all_true, all_preds, labels = cluster_sorted_labels,  normalize='true')
+    # cm = np.zeros((40,40), dtype = np.int)
+    # for i,j in zip(all_true, all_preds,):
+    #   cm[i,j] += 1
+    # Create Confusion Matrix for accuracy
+    # acc_cm = np.zeros((40,40), dtype = np.float)  
+    # for i in range(40):
+    #   for j in range(40):
+    #     acc_value = cm[i,j] / cm.sum(axis=1)[i] * 100
+    #     acc_cm[i,j] = round(acc_value,2)
     # Compute Per-Class Average Accuracy (Used in COAL PAPER)
-    per_cls_acc_vec = cm.diagonal() / cm.sum(axis=1) * 100  
+    per_cls_acc_vec = cm_acc.diagonal() / cm_acc.sum(axis=1) * 100  
+    # print('per_cls_acc_vec: ', per_cls_acc_vec)
     per_cls_avg_acc = per_cls_acc_vec.mean()
     # per_cls_acc_list = { i: np.round(per_cls_acc_vec[i], 2) for i in range(len(per_cls_acc_vec))}
     # per_cls_samples = { i: cm[i,:].sum() for i in range(len(target_classes))}
 
-  return average_accuracy, per_cls_avg_acc, cm
+  return average_loss, average_accuracy, per_cls_avg_acc, cm_acc
 
 ######################################################################
 ##### Optimization utilities
@@ -131,6 +155,9 @@ class DeviceDataLoader():
     def __init__(self, dl, device):
         self.dl = dl
         self.device = device
+        self.dataset = dl.dataset
+        
+
         
     def __iter__(self):
         """Yield a batch of data after moving it to device"""
@@ -212,36 +239,34 @@ def get_mean_std_dataset(args, name_ds):
     return mean , std
 
 
-def plot_confusion_matrix(cm, classes,
-                          normalize=False,
+def plot_confusion_matrix(ax, fig, cm,
                           title='Confusion matrix',
-                          cmap=plt.cm.Blues):
-    """
-    This function prints and plots the confusion matrix.
-    Normalization can be applied by setting `normalize=True`.
-    """
-    plt.imshow(cm, interpolation='nearest', cmap=cmap)
-    plt.title(title)
-    plt.colorbar()
-    tick_marks = np.arange(len(classes))
-    plt.xticks(tick_marks, classes, rotation=45)
-    plt.yticks(tick_marks, classes)
+                        ):
+  
+  sns.heatmap(cm, annot=True, fmt='.2f', xticklabels=cluster_sorted_classes, yticklabels=cluster_sorted_classes, cmap=plt.cm.Blues, linewidths=1, linecolor='white')
+  y_labels = ax.get_yticklabels()
+  y_ticks = ax.get_yticks()
+  x_labels = ax.get_xticklabels()
+  for xlabel, ylabel , tick in zip(x_labels, y_labels, y_ticks):
+    if tick < 13:
+      xlabel.set_color('r')
+      ylabel.set_color('r')
+    elif (tick > 13 and tick < 18): 
+      xlabel.set_color('b')
+      ylabel.set_color('b')
+    elif (tick > 18 and tick < 24):   
+      xlabel.set_color('g')
+      ylabel.set_color('g')
+    elif (tick > 24 and tick < 38):   
+      xlabel.set_color('m')
+      ylabel.set_color('m')
+    elif tick > 38:
+      xlabel.set_color('y')
+      ylabel.set_color('y')
+  plt.ylabel('Ground Truth')
+  plt.xlabel('Predicted')
+ 
 
-    if normalize:
-        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-        # print("Normalized confusion matrix")
-    # else:
-        # print('Confusion matrix, without normalization')
-
-    thresh = cm.max() / 2.
-    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
-        plt.text(j, i, cm[i, j],
-                 horizontalalignment="center",
-                 color="white" if cm[i, j] > thresh else "black")
-
-    plt.tight_layout()
-    plt.ylabel('True label')
-    plt.xlabel('Predicted label')
 
 
 def count_nb_per_class(ds , labels):

@@ -30,7 +30,7 @@ class SENTRY_ResNet50(nn.Module):
         self.classifier = nn.Linear(2048, self.num_cls)
         
         init.xavier_normal_(self.classifier.weight)
-        self.classifier.bias.data.zero_()
+
 
     def forward(self, x):
         # Extract features
@@ -219,16 +219,16 @@ class SuperClassModel(nn.Module):
 
         # Essentially the entire ResNet architecture are in these 4 lines below
         self.layer1 = self._make_layer(
-            Bottleneck, layers[0], intermediate_channels=64, stride=1
+            Bottleneck, layers[0], intermediate_channels=64, stride=1                   # Linear in_features = 256
         )
         self.layer2 = self._make_layer(
-            Bottleneck, layers[1], intermediate_channels=128, stride=2
+            Bottleneck, layers[1], intermediate_channels=128, stride=2                  # Linear in_features = 512
         )
         self.layer3 = self._make_layer(
-            Bottleneck, layers[2], intermediate_channels=256, stride=2
+            Bottleneck, layers[2], intermediate_channels=256, stride=2                  # Linear in_features = 1024
         )
         self.layer4 = self._make_layer(
-            Bottleneck, layers[3], intermediate_channels=512, stride=2
+            Bottleneck, layers[3], intermediate_channels=512, stride=2                  # Linear in_features = 2048
         )
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))  
@@ -250,6 +250,8 @@ class SuperClassModel(nn.Module):
             f = self.fc(f)
             return f
         elif path == 'branch':
+            g = self.layer3(x)
+            g = self.layer4(g)
             g = self.avgpool(x)
             g = g.reshape(g.shape[0], -1)
             g = self.fcb(g)

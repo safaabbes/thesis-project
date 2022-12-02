@@ -27,7 +27,7 @@ target_classes = ("airplane", "ambulance", "apple", "backpack", "banana", "batht
 def run_baseline_epochs( s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, optimizer, scheduler, logger):  
   # Setting Wandb
   wandb.init(
-      project='Source-Sentry-Testing', #Source-Only-ResNet50 OR Super-Class-Model-ResNet50
+      project='New-Source-Sentry-Testing', #Source-Only-ResNet50 OR Super-Class-Model-ResNet50
       name=args.exp,
       config = {
                 "source": args.source,
@@ -48,8 +48,8 @@ def run_baseline_epochs( s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, ar
     # OPTION 1: Source-Only Training
     train_loss , train_accuracy = source_train_step(epoch, args, model,s_train_dl, optimizer, logger)
     # Testing
-    s_test_accuracy, s_per_cls_avg_acc, s_cm= test_step(args, model,s_test_dl, logger)
-    t_test_accuracy, t_per_cls_avg_acc, t_cm = test_step(args, model,t_test_dl, logger)
+    s_loss, s_test_accuracy, s_per_cls_avg_acc, s_cm= test_step(args, model,s_test_dl, logger)
+    t_loss, t_test_accuracy, t_per_cls_avg_acc, t_cm = test_step(args, model,t_test_dl, logger)
     # Log Results
     logger.info('Epoch: {:d}'.format(epoch+1))
     logger.info('\t Source Train loss {:.5f}, Source Train accuracy {:.2f}'.format(train_loss, train_accuracy))
@@ -69,7 +69,7 @@ def run_baseline_epochs( s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, ar
             }
     wandb.log({**metrics})
     # Scheduler Step
-    scheduler.step()
+    # scheduler.step()
     
   # Plot Confusion Matrix
   plt.figure(figsize=(50,50))
@@ -118,7 +118,7 @@ def source_train_step(epoch, args, model, data_loader, optimizer, logger):
     total_correct += get_num_correct(preds, labels)   
     # Logging update
     batch_step += 1
-    if (batch_step + 1) % 100 == 0:
+    if (batch_step + 1) % 200 == 0:
       logger.info('Epoch [{}/{}], Step[{}/{}], Loss: {:.4f}'.format(epoch+1, args.n_epochs, batch_step+1,n_total_steps, loss.item()))
       
   # compute average loss and accuracy

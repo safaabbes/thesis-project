@@ -2,6 +2,7 @@ import os
 import os.path
 from PIL import Image
 import copy
+from collections import Counter
 import random
 import torch
 from torch.utils.data import random_split
@@ -9,7 +10,10 @@ from torch.utils.data import DataLoader
 from torchvision import transforms 
 from torchvision.datasets import ImageFolder
 from torch.utils.data import DataLoader
+from torch.utils.data.sampler import SubsetRandomSampler, WeightedRandomSampler
 import numpy as np
+
+
 
 super_classes_dict = { #This was made by using class_to_idx and matching super-classes to classes with the idx
     'animal': ([6, 8, 10, 14, 19, 22, 23, 24, 27, 28, 31, 33, 35], 0), 
@@ -147,22 +151,29 @@ class DomainNetDataset40():
               
         return  self.train_data, self.test_data
 
-    def get_dataloaders(self, train_ds, test_ds, num_workers=2, batch_size=128):
+    def get_dataloaders(self, train_ds, test_ds, num_workers=2, batch_size=128, class_balance_train = True):
         """Constructs and returns dataloaders
         """
-        train_loader = torch.utils.data.DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        train_idx = np.arange(len(train_ds))
+        if class_balance_train: 
+            y_train = [train_ds.targets[i] for i in train_idx]
+            count = dict(Counter(train_ds.targets))
+            # print('count values ', list(count.values()))
+            class_sample_count = np.array(list(count.values()))
+            # Find weights for each class
+            weight = 1. / class_sample_count
+            samples_weight = np.array([weight[t] for (t,_) in y_train])
+            samples_weight = torch.from_numpy(samples_weight)
+            # Create Weighted Random Sampler
+            train_sampler = WeightedRandomSampler(samples_weight.type('torch.DoubleTensor'), len(samples_weight))
+        else:
+            train_sampler = SubsetRandomSampler(train_idx)
+        
+        train_loader = torch.utils.data.DataLoader(train_ds, batch_size=batch_size, sampler = train_sampler, num_workers=num_workers)
         test_loader = torch.utils.data.DataLoader(test_ds, batch_size=batch_size, shuffle=False) 
         
         return train_loader, test_loader
 
-
-
-def reduce_split(ds, pct=0.5):
-
-
-
-  
-  return reduced_ds
 
 
 

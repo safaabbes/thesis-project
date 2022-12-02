@@ -1,20 +1,28 @@
 # thesis-project
 
 ### TODO List
-
-- [ ] Check Sentry Paper/ Code for more implementation details of the source-only
-- [ ] add checkpoint after 5 epochs
-- [ ] re-train keeping the batch size and hyperparameters used by the other papers (gidhom bithabt maa delil 3la kol choix belehi)
-- [ ] check number of samples used for both dataset in the training (bech tchouf ken idour 3al dataset lkol wela i9oss 3lihom)
-- [ ] output accuracies for branches
-
+(28/11/2022)
+- [x] fix number of samples used for each training step
+- [x] Re-create Confusion Matrix with accuracies 
+- [x] Confusion Matrix with super-class sorting
+- [ ] Try Tests with CLIP (https://github.com/openai/CLIP)
+- [x] Check SENTRY's dataset balancing if it can be implemented
+- [ ] Remake source training to be sure of the consistent result (using train_baseline.py)
+- [ ] check for new papers mentioning SENTRY
+- [ ] solve real dataset CUDA OUT OF MEMORY (always with new model)
+(22/11/2022)
+- [x] Check Sentry Paper/ Code for more implementation details of the source-only
+- [x] re-train keeping the batch size and hyperparameters used by the other papers 
+- [x] check number of samples used for both dataset in the training
+- [x] output accuracies for branches
+(17/11/2022)
 - [x] Search ways to generate super_classes
 - [x] Change accuracy metric  
 - [x] re-train source
 - [x] Create new model with a branch to classify super-classes
 - [x] implement new train steps for the new model
-- [ ] train new architecture
-
+- [x] train new architecture
+(11/11/2022)
 - [x] Implement dataset of 40 classes
 - [x] Test 12 directions on original resnet50 
 - [x] Test 12 directions on resnet50 with the additions made by Sentry
