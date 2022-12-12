@@ -1,20 +1,52 @@
 # thesis-project
 
+CUDA OUT OF MEMORY TRACKS: 
+sbatch --gres=gpu:1 --mem 32GB -p gpu-1080 real.sh (FAILED)
+sbatch --gres=gpu:2 --mem 32GB -p gpu-1080 real.sh (FAILED)
+sbatch --gres=gpu:1 --mem 32GB -p gpu-V100 real.sh (WORKS!) (node5)
+
 ### TODO List
+(07/12/2022)
+- [ ] Run Baseline Training for 40 epochs and saving confusion matrices for comparision with new models (Use SENTRY's model and original ResNet50)
+- [ ] Create a "confusion matrix" that computes the difference between the baseline and the new model to see the influence of super-classes
+- [ ] Run Model V1 Training with 50 epochs, gamma=alpha=0.5 on all directions 
+- [ ] implement Grad-Cam and vizualize fixed samples
+- [x] Implement Model v2 with domainNet clustering 
+- [ ] Test Model v2 
+- [ ] Try to make hyperparameter fine-tuning with wandb sweep
+- [ ] Implement v3 model (2 cluster model)
+- [ ] Try Tests with CLIP (https://github.com/openai/CLIP)
+- [ ] check for new papers mentioning SENTRY
+- [x] Get fixed setting between baseline and source: 
+        Removed scheduler/step
+        Same lr, momentum, optimizer, wd as baseline 
+        different epochs and bs (?)
+- [x] Debug Cuda our of memory for real as source
+        Removing cycle source: works
+- [x] log losses
+- [x] Confusion Matrix for super-class
+- [x] Check how balanced is WeightedRandomSampler:
+        HELPFUL LINK: https://towardsdatascience.com/demystifying-pytorchs-weightedrandomsampler-by-example-a68aceccb452
+        setting a batch size > 40 would be more coherent with weighted random sampler however it will become inconsistent with baseline and other work + when setting bs= 64 it gives cuda out of memory for all domains without using any cycle (??)
+- [x] Study Davide's code
+- [x] Clean code 
+
 (28/11/2022)
 - [x] fix number of samples used for each training step
 - [x] Re-create Confusion Matrix with accuracies 
 - [x] Confusion Matrix with super-class sorting
 - [ ] Try Tests with CLIP (https://github.com/openai/CLIP)
 - [x] Check SENTRY's dataset balancing if it can be implemented
-- [ ] Remake source training to be sure of the consistent result (using train_baseline.py)
+- [x] Remake source training to be sure of the consistent result (using train_baseline.py)
 - [ ] check for new papers mentioning SENTRY
 - [ ] solve real dataset CUDA OUT OF MEMORY (always with new model)
+
 (22/11/2022)
 - [x] Check Sentry Paper/ Code for more implementation details of the source-only
 - [x] re-train keeping the batch size and hyperparameters used by the other papers 
 - [x] check number of samples used for both dataset in the training
 - [x] output accuracies for branches
+
 (17/11/2022)
 - [x] Search ways to generate super_classes
 - [x] Change accuracy metric  
@@ -22,6 +54,7 @@
 - [x] Create new model with a branch to classify super-classes
 - [x] implement new train steps for the new model
 - [x] train new architecture
+
 (11/11/2022)
 - [x] Implement dataset of 40 classes
 - [x] Test 12 directions on original resnet50 

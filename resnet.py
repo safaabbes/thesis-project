@@ -7,9 +7,6 @@ from torchvision.models import resnet50, ResNet50_Weights
 import torch.nn.functional as F
 import numpy as np
 
-np.random.seed(1234)
-torch.manual_seed(1234)
-
 ######################################################################
 ##### SENTRY IMPLEMENTATION
 ######################################################################
@@ -21,16 +18,12 @@ class SENTRY_ResNet50(nn.Module):
         self.l2_normalize = l2_normalize
         self.temperature = temperature       
         self.criterion = nn.CrossEntropyLoss()
-        
         model = resnet50(weights=ResNet50_Weights.DEFAULT)  
-    
         model.fc = nn.Identity()
         self.conv_params = model
         self.fc_params = nn.Identity()        
         self.classifier = nn.Linear(2048, self.num_cls)
-        
         init.xavier_normal_(self.classifier.weight)
-
 
     def forward(self, x):
         # Extract features
@@ -40,7 +33,6 @@ class SENTRY_ResNet50(nn.Module):
         emb = self.fc_params(x)                             
         if self.l2_normalize: emb = F.normalize(emb)
         score = self.classifier(emb) / self.temperature
-      
         return score
 
     def load(self, init_path):
@@ -113,7 +105,6 @@ class ResNet(nn.Module):
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-
         # Essentially the entire ResNet architecture are in these 4 lines below
         self.layer1 = self._make_layer(
             Bottleneck, layers[0], intermediate_channels=64, stride=1
@@ -127,7 +118,6 @@ class ResNet(nn.Module):
         self.layer4 = self._make_layer(
             Bottleneck, layers[3], intermediate_channels=512, stride=2
         )
-
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))  
         self.classifier = nn.Linear(in_features=2048, out_features=1000, bias=True)
 
@@ -149,10 +139,6 @@ class ResNet(nn.Module):
     def _make_layer(self, Bottleneck, num_residual_blocks, intermediate_channels, stride):
         downsample = None
         layers = []
-
-        # Either if we half the input space for ex, 56x56 -> 28x28 (stride=2), or channels changes
-        # we need to adapt the Identity (skip connection) so it will be able to be added
-        # to the layer that's ahead
         if stride != 1 or self.in_channels != intermediate_channels * 4:
             downsample = nn.Sequential(
                 nn.Conv2d(
@@ -168,13 +154,7 @@ class ResNet(nn.Module):
         layers.append(
             Bottleneck(self.in_channels, intermediate_channels, downsample, stride)
         )
-
-        # The expansion size is always 4 for ResNet 50,101,152
         self.in_channels = intermediate_channels * 4
-
-        # For example for first resnet layer: 256 will be mapped to 64 as intermediate layer,
-        # then finally back to 256. Hence no identity downsample is needed, since stride = 1,
-        # and also same amount of channels.
         for i in range(num_residual_blocks - 1):
             layers.append(Bottleneck(self.in_channels, intermediate_channels))
 
@@ -205,19 +185,17 @@ def ResNet50(img_channel=3, num_classes=1000, n_super_classes = 5, pre_trained=T
 
 
 ######################################################################
-##### NESTED CLASSIFICATION MODEL IMPLEMENTATION 
+#####  MODEL V1 IMPLEMENTATION 
 ######################################################################
 
-class SuperClassModel(nn.Module):
+class Model_V1(nn.Module):
     def __init__(self, Bottleneck, layers, image_channels, num_classes):
-        super(SuperClassModel, self).__init__()
+        super(Model_V1, self).__init__()
         self.in_channels = 64
         self.conv1 = nn.Conv2d(image_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-
-        # Essentially the entire ResNet architecture are in these 4 lines below
         self.layer1 = self._make_layer(
             Bottleneck, layers[0], intermediate_channels=64, stride=1                   # Linear in_features = 256
         )
@@ -257,17 +235,11 @@ class SuperClassModel(nn.Module):
             g = self.fcb(g)
             return g 
         else:
-            raise Exception("Error! Incorrect Path Specified")
-            
-            
+            raise Exception("Error! Incorrect Path Specified") 
 
     def _make_layer(self, Bottleneck, num_residual_blocks, intermediate_channels, stride):
         downsample = None
         layers = []
-
-        # Either if we half the input space for ex, 56x56 -> 28x28 (stride=2), or channels changes
-        # we need to adapt the Identity (skip connection) so it will be able to be added
-        # to the layer that's ahead
         if stride != 1 or self.in_channels != intermediate_channels * 4:
             downsample = nn.Sequential(
                 nn.Conv2d(
@@ -283,13 +255,7 @@ class SuperClassModel(nn.Module):
         layers.append(
             Bottleneck(self.in_channels, intermediate_channels, downsample, stride)
         )
-
-        # The expansion size is always 4 for ResNet 50,101,152
         self.in_channels = intermediate_channels * 4
-
-        # For example for first resnet layer: 256 will be mapped to 64 as intermediate layer,
-        # then finally back to 256. Hence no identity downsample is needed, since stride = 1,
-        # and also same amount of channels.
         for i in range(num_residual_blocks - 1):
             layers.append(Bottleneck(self.in_channels, intermediate_channels))
 
@@ -304,8 +270,8 @@ class SuperClassModel(nn.Module):
 
 ######################################################################
 
-def SC_Res50(img_channel=3, num_classes=1000, n_super_classes = 5, pre_trained=True, progress=True):
-    model = SuperClassModel(Bottleneck, [3, 4, 6, 3], img_channel, num_classes)
+def Res50_V1(img_channel=3, num_classes=1000, n_super_classes = 5, pre_trained=True, progress=True):
+    model = Model_V1(Bottleneck, [3, 4, 6, 3], img_channel, num_classes)
     if pre_trained:
         # Load pre-trained resnet50 weights 
         source = resnet50(weights=ResNet50_Weights.DEFAULT)
@@ -318,13 +284,6 @@ def SC_Res50(img_channel=3, num_classes=1000, n_super_classes = 5, pre_trained=T
         model.fc = nn.Linear(in_features=2048, out_features=num_classes, bias=True)
         model.fcb = nn.Linear(in_features=512, out_features=n_super_classes, bias=True)
     return model
-
-def ResNet101(img_channel=3, num_classes=1000):
-    return ResNet(Bottleneck, [3, 4, 23, 3], img_channel, num_classes)
-
-def ResNet152(img_channel=3, num_classes=1000):
-    return ResNet(Bottleneck, [3, 8, 36, 3], img_channel, num_classes)
-
 
 
         
