@@ -9,6 +9,23 @@ sbatch --gres=gpu:1 --mem 32GB -p gpu-V100 real.sh (node81) (FAILED) (weird erro
 
 
 ### TODO List
+(13/12/2022)
+- [ ] Focus on 1 domain: Sketch
+- [ ] Analyse WeightedRandomSample over a few batches
+- [ ] Analyze baseline with balancing
+- [ ] Analyze Model 1 and 2 without balancing
+- [ ] Change branch position and run different trainings
+- [ ] Create the function Massimiliano explained (menghir branches, ba3d mayaamel il preds menhom yestakhrej il preds 3al superclasses w yakhla9 output kima mta3 fcb ema basé 3al output mta3 main)
+
+
+- [ ] Create a "confusion matrix" that computes the difference between the baseline and the new model to see the influence of super-classes
+- [ ] Run Model V1 Training with 50 epochs, gamma=alpha=0.5 on all directions 
+- [ ] implement Grad-Cam and vizualize fixed samples
+- [ ] Try to make hyperparameter fine-tuning with wandb sweep
+- [ ] Implement v3 model (2 cluster model)
+- [ ] Try Tests with CLIP (https://github.com/openai/CLIP)
+- [ ] check for new papers mentioning SENTRY
+
 (07/12/2022)
 - [x] Get fixed setting between baseline and source: \
         Removed scheduler/step \
