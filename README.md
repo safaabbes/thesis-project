@@ -10,12 +10,9 @@ sbatch --gres=gpu:1 --mem 32GB -p gpu-V100 real.sh (node81) (FAILED) (weird erro
 
 ### TODO List
 (07/12/2022)
-- [ ] Run Baseline Training for 40 epochs and saving confusion matrices for comparision with new models (Use SENTRY's model and original ResNet50)
 - [ ] Create a "confusion matrix" that computes the difference between the baseline and the new model to see the influence of super-classes
 - [ ] Run Model V1 Training with 50 epochs, gamma=alpha=0.5 on all directions 
 - [ ] implement Grad-Cam and vizualize fixed samples
-- [x] Implement Model v2 with domainNet clustering 
-- [ ] Test Model v2 
 - [ ] Try to make hyperparameter fine-tuning with wandb sweep
 - [ ] Implement v3 model (2 cluster model)
 - [ ] Try Tests with CLIP (https://github.com/openai/CLIP)
@@ -33,6 +30,9 @@ sbatch --gres=gpu:1 --mem 32GB -p gpu-V100 real.sh (node81) (FAILED) (weird erro
         setting a batch size > 40 would be more coherent with weighted random sampler however it will become inconsistent with baseline and other work + when setting bs= 64 it gives cuda out of memory for all domains without using any cycle (??)
 - [x] Study Davide's code
 - [x] Clean code 
+- [x] Run Baseline Training for 40 epochs and saving confusion matrices for comparision with new models (Use SENTRY's model and original ResNet50)
+- [x] Implement Model v2 with domainNet clustering 
+- [x] Test Model v2 
 
 (28/11/2022)
 - [x] fix number of samples used for each training step
