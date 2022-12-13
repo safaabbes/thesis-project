@@ -10,16 +10,16 @@ sbatch --gres=gpu:1 --mem 32GB -p gpu-V100 real.sh (node81) (FAILED) (weird erro
 
 ### TODO List
 (07/12/2022)
-- [x] Get fixed setting between baseline and source: 
-        Removed scheduler/step
-        Same lr, momentum, optimizer, wd as baseline 
-        different epochs and bs (?)
-- [x] Debug Cuda our of memory for real as source
-        Removing cycle source: works
+- [x] Get fixed setting between baseline and source: \
+        Removed scheduler/step \
+        Same lr, momentum, optimizer, wd as baseline \
+        different epochs and bs (?) \
+- [x] Debug Cuda our of memory for real as source \
+        Removing cycle source: works \
 - [x] log losses
 - [x] Confusion Matrix for super-class
 - [x] Check how balanced is WeightedRandomSampler:
-        HELPFUL LINK: https://towardsdatascience.com/demystifying-pytorchs-weightedrandomsampler-by-example-a68aceccb452
+        HELPFUL LINK: https://towardsdatascience.com/demystifying-pytorchs-weightedrandomsampler-by-example-a68aceccb452 \
         setting a batch size > 40 would be more coherent with weighted random sampler however it will become inconsistent with baseline and other work + when setting bs= 64 it gives cuda out of memory for all domains without using any cycle (??)
 - [x] Study Davide's code
 - [x] Clean code 
