@@ -13,9 +13,10 @@ sbatch --gres=gpu:1 --mem 32GB -p gpu-V100 real.sh (node81) (FAILED) (weird erro
 - [x] Get fixed setting between baseline and source: \
         Removed scheduler/step \
         Same lr, momentum, optimizer, wd as baseline \
-        different epochs and bs (?) \
+        different epochs and bs (?) 
 - [x] Debug Cuda our of memory for real as source \
         Removing cycle source: works \
+        Using Node5 without altering code for real: works
 - [x] log losses
 - [x] Confusion Matrix for super-class
 - [x] Check how balanced is WeightedRandomSampler:
