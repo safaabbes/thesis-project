@@ -78,7 +78,7 @@ def test_step(args, model, data_loader, logger):
     # Super Classes 2 Confusion Matrix
     s2_all_true = s2_all_true.tolist()
     s2_all_preds = s2_all_preds.tolist()
-    s2_cm_acc = confusion_matrix( s2_all_true, s2_all_preds, labels = list(range(12)),  normalize='true')
+    s2_cm_acc = confusion_matrix( s2_all_true, s2_all_preds, labels = list(range(13)),  normalize='true')
     # Compute average accuracy
     per_cls_avg_acc = cm_acc.diagonal().mean() * 100  
 

@@ -116,6 +116,7 @@ def main():
     logger.info('number of train samples of {} dataset: {}'.format(args.target, len(t_train_ds)))
     logger.info('number of test samples of {} dataset: {}'.format(args.target, len(t_test_ds)))
     logger.info('len of {} train dataloader {}'.format(args.target, len(t_train_dl)))
+    
     logger.info('len of {} test dataloader {}'.format(args.target, len(t_test_dl)))
     
     # Move Data to GPU
@@ -126,14 +127,14 @@ def main():
     #### Setup Model	 
     ################################################################################################################
     
-    if args.task == 'run_baseline':
+    if args.task == 'run_sentry_baseline':
         # Using SENTRY's Resnet50
         model = SENTRY_ResNet50() 
         model = model.to(args.device, non_blocking= True)
         logger.info('Baseline Training with SENTRY ResNet50')
     elif args.task == 'run_original_baseline':
         # Using Original Resnet50
-        model = ResNet50() 
+        model = ResNet50(num_classes=40) 
         model = model.to(args.device, non_blocking= True)
         logger.info('Baseline Training with Original ResNet50')
     elif args.task == 'run_model_v1':
@@ -143,7 +144,7 @@ def main():
         logger.info('Using Super-Classes Model V1')
     elif args.task == 'run_model_v2':
         # Testing Model v2
-        model = Res50_V1(num_classes=40, n_super_classes=12)
+        model = Res50_V1(num_classes=40, n_super_classes=13)
         model = model.to(args.device, non_blocking= True)
         logger.info('Using Super-Classes Model V2')
     else:
@@ -170,7 +171,7 @@ def main():
     optimizer = generate_optimizer(model, args)
     
     # Test and Train over epochs
-    if args.task == 'run_baseline':
+    if args.task == 'run_sentry_baseline' or args.task == 'run_original_baseline':
         train_baseline(
                 s_train_dl, s_test_dl, 
                 t_train_dl, t_test_dl,

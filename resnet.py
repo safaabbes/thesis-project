@@ -169,7 +169,7 @@ class ResNet(nn.Module):
         
 ######################################################################
         
-def ResNet50(img_channel=3, num_classes=1000, n_super_classes = 5, pre_trained=True, progress=True):
+def ResNet50(img_channel=3, num_classes=40, pre_trained=True, progress=True):
     model = ResNet(Bottleneck, [3, 4, 6, 3], img_channel, num_classes)
     if pre_trained:
         # Load pre-trained resnet50 weights 

@@ -88,11 +88,11 @@ def train_model( s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, opti
       wandb.log({"t_test/s1_t_cm": wandb.Image(plt)})
       plt.close() 
       # Super Classes 2
-      fig, ax = plt.subplots(figsize=(10,10))
+      fig, ax = plt.subplots(figsize=(15,15))
       sns.heatmap(s2_s_cm, annot=True, fmt='.2f', xticklabels=s2_classes, yticklabels=s2_classes, cmap=plt.cm.Blues)
       wandb.log({"s_test/s2_s_cm": wandb.Image(plt)})
       plt.close()
-      fig, ax = plt.subplots(figsize=(10,10))
+      fig, ax = plt.subplots(figsize=(15,15))
       sns.heatmap(s2_t_cm, annot=True, fmt='.2f', xticklabels=s2_classes, yticklabels=s2_classes, cmap=plt.cm.Blues)
       wandb.log({"t_test/s2_t_cm": wandb.Image(plt)})
       plt.close() 
@@ -206,22 +206,15 @@ def model_v2_train_step(epoch, args, model, source_dl, target_dl, optimizer, log
     if batch_idx == n_total_steps:
       break
     # forward pass
-    print(s_super_labels)
     main_preds = model(s_data, 'main')
     s_branch_preds = model(s_data, 'branch')
-    print(s_branch_preds)
     t_branch_preds = model(t_data, 'branch')
-    print(t_branch_preds)
     # loss computation
     main_loss = F.cross_entropy(main_preds, s_labels)
     s_branch_loss = F.cross_entropy(s_branch_preds, s_super_labels)
     t_branch_loss = F.cross_entropy(t_branch_preds, t_super_labels)
-    print('main_loss' main_loss)
-    print('s_branch_loss', s_branch_loss)
-    print('t_branch_loss', t_branch_loss)
-    # total_loss = main_loss + args.alpha*s_branch_loss + args.gamma*t_branch_loss
+    total_loss = main_loss + args.alpha*s_branch_loss + args.gamma*t_branch_loss
     # backward pass
-    total_loss = main_loss
     total_loss.backward()
     # parameters update
     optimizer.step()

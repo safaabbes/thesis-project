@@ -1,9 +1,12 @@
 # thesis-project
 
 CUDA OUT OF MEMORY TRACKS: 
-sbatch --gres=gpu:1 --mem 32GB -p gpu-1080 real.sh (FAILED)
-sbatch --gres=gpu:2 --mem 32GB -p gpu-1080 real.sh (FAILED)
-sbatch --gres=gpu:1 --mem 32GB -p gpu-V100 real.sh (WORKS!) (node5)
+sbatch --gres=gpu:1 --mem 32GB -p gpu-V100 real.sh (node5) (WORKS!) 
+sbatch --gres=gpu:1 --mem 32GB -p gpu-1080 real.sh (FAILED) (even for other domains with target real)
+sbatch --gres=gpu:2 --mem 32GB -p gpu-1080 real.sh (FAILED) (even for other domains with target real)
+sbatch --gres=gpu:1 --mem 32GB -p gpu-V100 real.sh (node8) (FAILED) (even for other domains with target real)
+sbatch --gres=gpu:1 --mem 32GB -p gpu-V100 real.sh (node81) (FAILED) (weird error: warnings.warn(incompatible_device_warn.format(device_name, capability, " ".join(arch_list), device_name)) 
+
 
 ### TODO List
 (07/12/2022)

@@ -19,7 +19,7 @@ from classes import *
 def train_baseline( s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, optimizer,  logger):  
   # Setting Wandb
   wandb.init(
-      project='Baseline-SENTRY-Train',
+      project='{}'.format(args.task),
       name=args.exp,
       config = {
                 "source": args.source,
@@ -77,11 +77,11 @@ def train_baseline( s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, o
   wandb.log({"t_test/s1_t_cm": wandb.Image(plt)})
   plt.close() 
   # Super Classes 2
-  fig, ax = plt.subplots(figsize=(10,10))
+  fig, ax = plt.subplots(figsize=(15,15))
   sns.heatmap(s2_s_cm, annot=True, fmt='.2f', xticklabels=s2_classes, yticklabels=s2_classes, cmap=plt.cm.Blues)
   wandb.log({"s_test/s2_s_cm": wandb.Image(plt)})
   plt.close()
-  fig, ax = plt.subplots(figsize=(10,10))
+  fig, ax = plt.subplots(figsize=(15,15))
   sns.heatmap(s2_t_cm, annot=True, fmt='.2f', xticklabels=s2_classes, yticklabels=s2_classes, cmap=plt.cm.Blues)
   wandb.log({"t_test/s2_t_cm": wandb.Image(plt)})
   plt.close() 
