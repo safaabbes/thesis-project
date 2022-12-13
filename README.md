@@ -1,7 +1,7 @@
 # thesis-project
 
 CUDA OUT OF MEMORY TRACKS: 
-sbatch --gres=gpu:1 --mem 32GB -p gpu-V100 real.sh (node5) (WORKS!) 
+sbatch --gres=gpu:1 --mem 32GB -p gpu-V100 real.sh (node5) (WORKS!) \\
 sbatch --gres=gpu:1 --mem 32GB -p gpu-1080 real.sh (FAILED) (even for other domains with target real)
 sbatch --gres=gpu:2 --mem 32GB -p gpu-1080 real.sh (FAILED) (even for other domains with target real)
 sbatch --gres=gpu:1 --mem 32GB -p gpu-V100 real.sh (node8) (FAILED) (even for other domains with target real)
