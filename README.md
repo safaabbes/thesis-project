@@ -10,13 +10,6 @@ sbatch --gres=gpu:1 --mem 32GB -p gpu-V100 real.sh (node81) (FAILED) (weird erro
 
 ### TODO List
 (07/12/2022)
-- [ ] Create a "confusion matrix" that computes the difference between the baseline and the new model to see the influence of super-classes
-- [ ] Run Model V1 Training with 50 epochs, gamma=alpha=0.5 on all directions 
-- [ ] implement Grad-Cam and vizualize fixed samples
-- [ ] Try to make hyperparameter fine-tuning with wandb sweep
-- [ ] Implement v3 model (2 cluster model)
-- [ ] Try Tests with CLIP (https://github.com/openai/CLIP)
-- [ ] check for new papers mentioning SENTRY
 - [x] Get fixed setting between baseline and source: 
         Removed scheduler/step
         Same lr, momentum, optimizer, wd as baseline 
@@ -33,6 +26,13 @@ sbatch --gres=gpu:1 --mem 32GB -p gpu-V100 real.sh (node81) (FAILED) (weird erro
 - [x] Run Baseline Training for 40 epochs and saving confusion matrices for comparision with new models (Use SENTRY's model and original ResNet50)
 - [x] Implement Model v2 with domainNet clustering 
 - [x] Test Model v2 
+- [ ] Create a "confusion matrix" that computes the difference between the baseline and the new model to see the influence of super-classes
+- [ ] Run Model V1 Training with 50 epochs, gamma=alpha=0.5 on all directions 
+- [ ] implement Grad-Cam and vizualize fixed samples
+- [ ] Try to make hyperparameter fine-tuning with wandb sweep
+- [ ] Implement v3 model (2 cluster model)
+- [ ] Try Tests with CLIP (https://github.com/openai/CLIP)
+- [ ] check for new papers mentioning SENTRY
 
 (28/11/2022)
 - [x] fix number of samples used for each training step
