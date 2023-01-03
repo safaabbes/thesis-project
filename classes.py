@@ -57,38 +57,38 @@ sorted_s1_classes_idx = [
 #### DomainNet Clustering (Super Class 2)
 ################################################################################################################
 
-s2_classes = ['mammal', 'bird', 'insect', 'fruit', 'food', 'road_transport', 'sky_transport', 'furniture', 'electricity', 'office', 'kitchen', 'music', 'building' ]
+s2_classes = ['furniture','mammal','electricity','building','office','road_transport','food','music','fruit','bird','kitchen','sky_transport','insect',]
 
-s2_classes_dict = { #This was made by using DomainNet Paper Clustering
-    'mammal': ([6, 19, 22, 23, 24, 28, 31, 33, 35], 0), 
-    'bird': ([27, 10], 1) ,
-    'insect': ([8, 14], 2) ,
-    'fruit': ([2, 4, 36], 3),
-    'food': ([15, 25], 4) ,
+s2_classes_dict = { #This was made by using DomainNet Paper Clustering, Mapping adjusted to Davide's code
+    'furniture': ([5, 7, 20, 29, 37], 0),
+    'mammal': ([6, 19, 22, 23, 24, 28, 31, 33, 35], 1), 
+    'electricity': ([16, 17, 38], 2) ,
+    'building': ([12, 32], 3),
+    'office': ([11, 34, 21, 3], 4) ,
     'road_transport': ([1, 9, 13, 18, 39], 5),
-    'sky_transport': ([0], 6) ,
-    'furniture': ([5, 7, 20, 29, 37], 7),
-    'electricity': ([16, 17, 38], 8) ,
-    'office': ([11, 34, 21, 3], 9) ,
+    'food': ([15, 25], 6) ,
+    'music':  ([26], 7) ,
+    'fruit': ([2, 4, 36], 8),
+    'bird': ([27, 10], 9) ,
     'kitchen': ([30], 10) ,
-    'music':  ([26], 11) ,
-    'building': ([12, 32], 12),
+    'sky_transport': ([0], 11) ,
+    'insect': ([8, 14], 12) ,
     } 
 
 sorted_s2_classes = [
-    'bear','cat', 'cow', 'dog', 'dolphin', 'elephant', 'horse', 'rabbit', 'sheep',
-    'bird','duck', 
-    'bee','butterfly',
-    'apple', 'banana', 'strawberry',
-    'cake', 'donut',
-    'ambulance', 'bicycle', 'bus', 'car', 'truck',
-    'airplane', 
     'bathtub', 'bed', 'chair', 'fence', 'table', 
+    'bear','cat', 'cow', 'dog', 'dolphin', 'elephant', 'horse', 'rabbit', 'sheep',
     'calculator','camera', 'telephone', 
+    'bridge', 'house',
     'backpack', 'book',  'clock', 'scissors', 
-    'fork', 
+    'ambulance', 'bicycle', 'bus', 'car', 'truck',
+    'cake', 'donut',
     'drums',
-    'bridge', 'house'
+    'apple', 'banana', 'strawberry',
+    'bird','duck', 
+    'fork', 
+    'airplane', 
+    'bee','butterfly',
 ]
 
 sorted_s2_classes_idx = [
