@@ -13,18 +13,19 @@ import seaborn as sns
 from utils import *
 from classes import *
 
-def train_model( s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, optimizer, logger):  
+def train_model( s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, optimizer, criterion, logger):  
   # Setting Wandb
   wandb.init(
-      project='New_B4_{}'.format(args.task), 
+      project='EXP0', 
       name=args.exp,
-      config = {
+      config = {"model_type": args.model_type,
                 "source": args.source,
                 "target": args.target,
                 "epochs": args.n_epochs,
                 "batch_size": args.bs,
-                "balance": args.cbt,
-                # New Hyper-parameters
+                "balance": args.balance_mini_batches,
+                "lr": args.lr,
+                "reduction": args.reduction,
                 "mu1": args.mu1,
                 "mu2": args.mu2,
                 "mu3": args.mu3,
@@ -33,75 +34,44 @@ def train_model( s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, opti
   since = time.time()
   # wandb.watch(model)
   for epoch in range(args.n_epochs):
-    if args.task == 'run_model_v1':
-      s_avg_acc, sb_avg_acc, tb_avg_acc, all_losses  = model_v1_train_step(epoch, args, model,s_train_dl, t_train_dl, optimizer, logger)
-    elif args.task == 'run_model_v2':
-      s_avg_acc, sb_avg_acc, tb_avg_acc, all_losses  = model_v2_train_step(epoch, args, model,s_train_dl, t_train_dl, optimizer, logger)
-    elif args.task == 'run_model_v3':
-      s_avg_acc, sb_avg_acc, tb_avg_acc, all_losses = model_v3_train_step(epoch, args, model,s_train_dl, t_train_dl, optimizer, logger)
-    # Plot Samples Per Cls
-    # if epoch == 0:
-    #   plot_samples_per_cls(instances_list)
+    if args.model_type == 'R50_2H':
+      train_stats = train_step_2H(epoch, args, model,s_train_dl, t_train_dl, optimizer, criterion, logger)
+    elif args.model_type == 'R50_1H':
+      train_stats = train_step_1H(epoch, args, model,s_train_dl, t_train_dl, optimizer, criterion, logger)
     # Testing  
-    s_test_loss, s_test_accuracy, s_per_cls_avg_acc, s_cm, s1_s_cm, s2_s_cm = test_step(args, model,s_test_dl, logger)
-    t_test_loss, t_test_accuracy, t_per_cls_avg_acc, t_cm, s1_t_cm, s2_t_cm= test_step(args, model,t_test_dl, logger)
+    s_test_stats = test_step(args, model,s_test_dl, criterion, logger)
+    t_test_stats = test_step(args, model,t_test_dl, criterion, logger)
+    
     # Log Results
-    logger.info('Epoch: {:d}'.format(epoch+1))
-    logger.info('\t Source AVG ACC {:.2f}, Source TASK AVG ACC  {:.2f}, Target TASK AVG ACC  {:.2f}'.format(s_avg_acc, sb_avg_acc, tb_avg_acc))
-    logger.info('\t Source Test accuracy {:.2f}, Source per_cls_avg_acc {:.2f}'.format(s_test_accuracy, s_per_cls_avg_acc))
-    logger.info('\t Target Test accuracy {:.2f}, Target per_cls_avg_acc {:.2f}'.format(t_test_accuracy, t_per_cls_avg_acc))
+    # if (epoch) % args.freq_saving == 0:
+    logger.info('Epoch: {:d}'.format(epoch+1)) 
+    logger.info('\t Source Test Accuracies')
+    logger.info('\t S_OA1: {:.4f}, S_MCA1: {:.4f}, S_OA2: {:.4f}, S_MCA2: {:.4f}'.format(
+        s_test_stats['oa1'], s_test_stats['mca1'], s_test_stats['oa2'], s_test_stats['mca2']))
+    logger.info('\t Target Test Accuracies')
+    logger.info('\t T_OA1: {:.4f}, T_MCA1: {:.4f}, T_OA2: {:.4f}, T_MCA2: {:.4f}'.format(
+        t_test_stats['oa1'], t_test_stats['mca1'], t_test_stats['oa2'], t_test_stats['mca2']))
     logger.info('-----------------------------------------------------------------------')
+    
     # Log results to Wandb 
     wandb.log({
         "epoch": epoch,
-        # Training Losses
-        "main_loss": all_losses[0],
-        "sb_loss": all_losses[1],
-        "tb_loss": all_losses[2],
-        "total_loss": all_losses[3],
         # Train Accuracies
-        "main_avg_acc": s_avg_acc, 
-        "sb_avg_acc": sb_avg_acc,
-        "tb_avg_acc": tb_avg_acc,
+        "train_oa1": train_stats['oa1'], 
+        "train_mca1": train_stats['mca1'], 
+        "train_oa2": train_stats['oa2'], 
+        "train_mca2": train_stats['mca2'], 
         # Source Test Results
-        "s_test/s_test_loss": s_test_loss,
-        "s_test/test_per_cls_avg_acc":s_per_cls_avg_acc,
-        "s_test/test_avg_acc":s_test_accuracy,
+        "s_test/oa1": s_test_stats['oa1'],
+        "s_test/oa2": s_test_stats['oa2'],
+        "s_test/mca1": s_test_stats['mca1'],
+        "s_test/mca2": s_test_stats['mca2'],
         # Target Test Results
-        "t_test/t_test_loss": t_test_loss,
-        "t_test/test_per_cls_avg_acc":t_per_cls_avg_acc,
-        "t_test/test_avg_acc":t_test_accuracy,
+        "t_test/oa1": t_test_stats['oa1'],
+        "t_test/oa2": t_test_stats['oa2'],
+        "t_test/mca1": t_test_stats['mca1'],
+        "t_test/mca2": t_test_stats['mca2'],
         })
-    
-    if (epoch) % args.freq_saving == 0:
-    # Plot Confusion Matrix
-      fig, ax = plt.subplots(figsize=(50,50))
-      plot_confusion_matrix(ax, fig, s_cm)
-      wandb.log({"s_test/s_cm": wandb.Image(plt)})
-      plt.close()
-      fig, ax = plt.subplots(figsize=(50,50))
-      plot_confusion_matrix(ax, fig, t_cm)
-      wandb.log({"t_test/t_cm": wandb.Image(plt)})
-      plt.close() 
-      # Plot Super Classes Confusion Matrix
-      fig, ax = plt.subplots(figsize=(5,5))
-      sns.heatmap(s1_s_cm, annot=True, fmt='.2f', xticklabels=s1_classes, yticklabels=s1_classes, cmap=plt.cm.Blues)
-      wandb.log({"s_test/s1_s_cm": wandb.Image(plt)})
-      plt.close()
-      fig, ax = plt.subplots(figsize=(5,5))
-      sns.heatmap(s1_t_cm, annot=True, fmt='.2f', xticklabels=s1_classes, yticklabels=s1_classes, cmap=plt.cm.Blues)
-      wandb.log({"t_test/s1_t_cm": wandb.Image(plt)})
-      plt.close() 
-      # Super Classes 2
-      fig, ax = plt.subplots(figsize=(15,15))
-      sns.heatmap(s2_s_cm, annot=True, fmt='.2f', xticklabels=s2_classes, yticklabels=s2_classes, cmap=plt.cm.Blues)
-      wandb.log({"s_test/s2_s_cm": wandb.Image(plt)})
-      plt.close()
-      fig, ax = plt.subplots(figsize=(15,15))
-      sns.heatmap(s2_t_cm, annot=True, fmt='.2f', xticklabels=s2_classes, yticklabels=s2_classes, cmap=plt.cm.Blues)
-      wandb.log({"t_test/s2_t_cm": wandb.Image(plt)})
-      plt.close() 
-      
   # Log time
   duration = time.time() - since
   logger.info('Training duration: {}'.format(str(datetime.timedelta(seconds=duration))))
@@ -109,12 +79,6 @@ def train_model( s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, opti
   torch.save({
     'epoch': epoch,
     'args': args,
-    's_cm': s_cm,
-    't_cm': t_cm,
-    's1_s_cm': s1_s_cm,
-    's1_t_cm': s1_t_cm,
-    's2_s_cm': s2_s_cm,
-    's2_t_cm': s2_t_cm,
     'model_state_dict': model.module.state_dict() if hasattr(model, 'module') else model.state_dict()
     },'/storage/TEV/sabbes/model_weights_{}.pth'.format(args.exp))
   # Savings on Wandb
@@ -122,14 +86,243 @@ def train_model( s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, opti
     model.module.save(os.path.join(wandb.run.dir, "model.{}".format(args.exp)))
   else:
     model.save(os.path.join(wandb.run.dir, "model.{}".format(args.exp)))
-  np.save(os.path.join(wandb.run.dir, "s_cm_{}".format(args.exp)), s_cm)
-  np.save(os.path.join(wandb.run.dir, "t_cm_{}".format(args.exp)), t_cm)
-  np.save(os.path.join(wandb.run.dir, "s1_s_cm_{}".format(args.exp)), s1_s_cm)
-  np.save(os.path.join(wandb.run.dir, "s1_t_cm_{}".format(args.exp)), s1_t_cm)
-  np.save(os.path.join(wandb.run.dir, "s2_s_cm_{}".format(args.exp)), s2_s_cm)
-  np.save(os.path.join(wandb.run.dir, "s2_t_cm_{}".format(args.exp)), s2_t_cm)
   wandb.finish()
   
+
+def train_step_2H(epoch, args, model, source_dl, target_dl, optimizer, criterion, logger):
+  nb_source_samples, nb_target_samples = 0,0
+  running_loss, running_loss1_source, running_loss2_source, running_loss2_target = list(), list(), list(), list()
+  running_oa1, running_mca1_num, running_mca1_den = list(), list(), list()
+  running_oa2, running_mca2_num, running_mca2_den = list(), list(), list()
+  logger.info("Start Training")
+  model.train() 
+  n_total_steps = max(len(source_dl), len(target_dl))
+  
+  # Loop over the bigger dataloader
+  # for batch_idx, (data_source, data_target) in enumerate(zip(cycle(source_dl), cycle(target_dl))):
+  #   if batch_idx == n_total_steps:
+  #     break
+   
+  # Loop on target dataloader
+  dataloader_iterator = iter(source_dl)
+  for data_target in target_dl:
+    try:
+        data_source = next(dataloader_iterator)
+    except StopIteration:
+        dataloader_iterator = iter(source_dl)
+        data_source = next(dataloader_iterator)
+
+    # Load source mini-batch
+    images_source, (s_labels, s1_super_labels, s2_super_labels) = data_source
+    
+    # Load target mini-batch
+    images_target, (t_labels, t1_super_labels, t2_super_labels) = data_target
+    
+    # Zero the parameters gradients
+    optimizer.zero_grad()
+    
+    # Forward pass for source data
+    logits1_source, logits2_source = model(images_source)
+    _, preds1_source = torch.max(logits1_source, dim=1)
+    _, preds2_source = torch.max(logits2_source, dim=1)
+
+    # Forward pass for target data
+    logits1_target, logits2_target = model(images_target)
+    _, preds1_target = torch.max(logits1_target, dim=1)
+    _, preds2_target = torch.max(logits2_target, dim=1)
+
+    # Losses
+    main_loss = args.mu1 * criterion(logits1_source, s_labels)
+    s_branch_loss = args.mu2 * criterion(logits2_source, s2_super_labels)
+    t_branch_loss = args.mu3 * criterion(logits2_target, t2_super_labels)
+    loss = main_loss + s_branch_loss + t_branch_loss
+
+    # Back-propagation
+    loss.backward()
+
+    # Optimizer step
+    optimizer.step()
+
+    # fetch prediction and loss value
+    nb_source_samples += images_source.shape[0]
+    nb_target_samples += images_target.shape[0]
+    
+    # Update Losses
+    running_loss.append(loss.item())
+    running_loss1_source.append(main_loss.item())
+    running_loss2_source.append(s_branch_loss.item())
+    running_loss2_target.append(t_branch_loss.item())
+    
+    # Update metrics
+    oa1 = torch.sum(preds1_source == s_labels.squeeze()) / len(s_labels)
+    running_oa1.append(oa1.item())
+    mca1_num = torch.sum(
+        torch.nn.functional.one_hot(preds1_source, num_classes=40) * \
+        torch.nn.functional.one_hot(s_labels, num_classes=40), dim=0)
+    mca1_den = torch.sum(
+        torch.nn.functional.one_hot(s_labels, num_classes=40), dim=0)
+    running_mca1_num.append(mca1_num.detach().cpu().numpy())
+    running_mca1_den.append(mca1_den.detach().cpu().numpy())
+
+    oa2 = torch.sum(preds2_source == s2_super_labels.squeeze()) / len(s2_super_labels)
+    running_oa2.append(oa2.item())
+    mca2_num = torch.sum(
+        torch.nn.functional.one_hot(preds2_source, num_classes=13) * \
+        torch.nn.functional.one_hot(s2_super_labels, num_classes=13), dim=0)
+    mca2_den = torch.sum(
+        torch.nn.functional.one_hot(s2_super_labels, num_classes=13), dim=0)
+    running_mca2_num.append(mca2_num.detach().cpu().numpy())
+    running_mca2_den.append(mca2_den.detach().cpu().numpy())
+        
+    # # Logging update
+    # if (batch_idx + 1) % 200 == 0:
+    #   logger.info('Epoch [{}/{}], Step[{}/{}], Loss: {:.4f}'.format(epoch+1, args.n_epochs, batch_idx+1, n_total_steps, loss.item()))
+      
+  # Plot number of samples loaded 
+  logger.info('Number of Source Samples used {} / {}'.format(nb_source_samples , len(source_dl.dataset)))
+  logger.info('Number of Target Samples used {} / {}'.format(nb_target_samples , len(target_dl.dataset)))
+  
+  # Update MCA metric
+  mca1_num = np.sum(running_mca1_num, axis=0)
+  mca1_den = 1e-16 + np.sum(running_mca1_den, axis=0)
+  mca2_num = np.sum(running_mca2_num, axis=0)
+  mca2_den = 1e-16 + np.sum(running_mca2_den, axis=0)
+
+  stats = {
+    'loss': np.mean(running_loss),
+    'loss1_source': np.mean(running_loss1_source),
+    'loss2_source': np.mean(running_loss2_source),
+    'loss2_target': np.mean(running_loss2_target),
+    'oa1': np.mean(running_oa1),
+    'mca1': np.mean(mca1_num/mca1_den),
+    'oa2': np.mean(running_oa2),
+    'mca2': np.mean(mca2_num/mca2_den)
+      }
+  
+  return stats
+
+
+def train_step_1H(epoch, args, model, source_dl, target_dl, optimizer, criterion, logger):
+  nb_source_samples, nb_target_samples = 0,0
+  running_loss, running_loss1_source, running_loss2_source, running_loss2_target = list(), list(), list(), list()
+  running_oa1, running_mca1_num, running_mca1_den = list(), list(), list()
+  running_oa2, running_mca2_num, running_mca2_den = list(), list(), list()
+  logger.info("Start Training")
+  model.train() 
+  n_total_steps = max(len(source_dl), len(target_dl))
+  
+  # # Loop over the bigger dataloader
+  # for batch_idx, (data_source, data_target) in enumerate(zip(cycle(source_dl), cycle(target_dl))):
+  #   if batch_idx == n_total_steps:
+  #     break
+    
+  # Loop on target dataloader
+  dataloader_iterator = iter(source_dl)
+  for data_target in target_dl:
+    try:
+        data_source = next(dataloader_iterator)
+    except StopIteration:
+        dataloader_iterator = iter(source_dl)
+        data_source = next(dataloader_iterator)
+
+    # Load source mini-batch
+    images_source, (s_labels, s1_super_labels, s2_super_labels) = data_source
+    
+    # Load target mini-batch
+    images_target, (t_labels, t1_super_labels, t2_super_labels) = data_target
+    
+    # Zero the parameters gradients
+    optimizer.zero_grad()
+        
+    # Forward pass for source data
+    logits1_source = model(images_source)
+    _, preds1_source = torch.max(logits1_source, dim=1)
+
+    tmp = np.load('mapping.npz')
+    mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+    logits2_source = torch.mm(logits1_source, mapping) / (1e-6 + torch.sum(mapping, dim=0))
+    _, preds2_source = torch.max(logits2_source, dim=1)
+
+    # Forward pass for target data
+    logits1_target = model(images_target)
+    _, preds1_target = torch.max(logits1_target, dim=1)
+
+    tmp = np.load('mapping.npz')
+    mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+    logits2_target = torch.mm(logits1_target, mapping) / (1e-6 + torch.sum(mapping, dim=0))
+    _, preds2_target = torch.max(logits2_target, dim=1)
+    
+    # Losses
+    main_loss = args.mu1 * criterion(logits1_source, s_labels)
+    s_branch_loss = args.mu2 * criterion(logits2_source, s2_super_labels)
+    t_branch_loss = args.mu3 * criterion(logits2_target, t2_super_labels)
+    loss = main_loss + s_branch_loss + t_branch_loss
+
+    # Back-propagation
+    loss.backward()
+
+    # Optimizer step
+    optimizer.step()
+
+    # fetch prediction and loss value
+    nb_source_samples += images_source.shape[0]
+    nb_target_samples += images_target.shape[0]
+    
+    # Update Losses
+    running_loss.append(loss.item())
+    running_loss1_source.append(main_loss.item())
+    running_loss2_source.append(s_branch_loss.item())
+    running_loss2_target.append(t_branch_loss.item())
+    
+    # Update metrics
+    oa1 = torch.sum(preds1_source == s_labels.squeeze()) / len(s_labels)
+    running_oa1.append(oa1.item())
+    mca1_num = torch.sum(
+        torch.nn.functional.one_hot(preds1_source, num_classes=40) * \
+        torch.nn.functional.one_hot(s_labels, num_classes=40), dim=0)
+    mca1_den = torch.sum(
+        torch.nn.functional.one_hot(s_labels, num_classes=40), dim=0)
+    running_mca1_num.append(mca1_num.detach().cpu().numpy())
+    running_mca1_den.append(mca1_den.detach().cpu().numpy())
+
+    oa2 = torch.sum(preds2_source == s2_super_labels.squeeze()) / len(s2_super_labels)
+    running_oa2.append(oa2.item())
+    mca2_num = torch.sum(
+        torch.nn.functional.one_hot(preds2_source, num_classes=13) * \
+        torch.nn.functional.one_hot(s2_super_labels, num_classes=13), dim=0)
+    mca2_den = torch.sum(
+        torch.nn.functional.one_hot(s2_super_labels, num_classes=13), dim=0)
+    running_mca2_num.append(mca2_num.detach().cpu().numpy())
+    running_mca2_den.append(mca2_den.detach().cpu().numpy())
+        
+    # Logging update
+    # if (batch_idx + 1) % 200 == 0:
+    #   logger.info('Epoch [{}/{}], Step[{}/{}], Loss: {:.4f}'.format(epoch+1, args.n_epochs, batch_idx+1, n_total_steps, loss.item()))
+      
+  # Plot number of samples loaded 
+  logger.info('Number of Source Samples used {} / {}'.format(nb_source_samples , len(source_dl.dataset)))
+  logger.info('Number of Target Samples used {} / {}'.format(nb_target_samples , len(target_dl.dataset)))
+  
+  # Update MCA metric
+  mca1_num = np.sum(running_mca1_num, axis=0)
+  mca1_den = 1e-16 + np.sum(running_mca1_den, axis=0)
+  mca2_num = np.sum(running_mca2_num, axis=0)
+  mca2_den = 1e-16 + np.sum(running_mca2_den, axis=0)
+
+  stats = {
+    'loss': np.mean(running_loss),
+    'loss1_source': np.mean(running_loss1_source),
+    'loss2_source': np.mean(running_loss2_source),
+    'loss2_target': np.mean(running_loss2_target),
+    'oa1': np.mean(running_oa1),
+    'mca1': np.mean(mca1_num/mca1_den),
+    'oa2': np.mean(running_oa2),
+    'mca2': np.mean(mca2_num/mca2_den)
+      }
+  
+  return stats
+
+
 def model_v1_train_step(epoch, args, model, source_dl, target_dl, optimizer, logger):
   nb_source_samples = 0
   nb_target_samples = 0
@@ -239,8 +432,8 @@ def model_v2_train_step(epoch, args, model, source_dl, target_dl, optimizer, log
     sb_total_correct += get_num_correct(s_branch_preds, s_super_labels)
     tb_total_correct += get_num_correct(t_branch_preds, t_super_labels)     
     # Logging update
-    if (batch_idx + 1) % 200 == 0:
-      logger.info('Epoch [{}/{}], Step[{}/{}], Loss: {:.4f}'.format(epoch+1, args.n_epochs, batch_idx+1,n_total_steps, main_loss.item()))
+    # if (batch_idx + 1) % 200 == 0:
+    #   logger.info('Epoch [{}/{}], Step[{}/{}], Loss: {:.4f}'.format(epoch+1, args.n_epochs, batch_idx+1,n_total_steps, main_loss.item()))
       
   # Plot number of samples loaded 
   logger.info('Number of Source Samples used {} / {}'.format(nb_source_samples , len(source_dl.dataset)))

@@ -32,59 +32,64 @@ def super_class(label):
 def get_num_correct(preds, labels):
   return preds.argmax(dim=1).eq(labels).sum().item()
 
-def test_step(args, model, data_loader, logger):
-  nb_samples = 0
-  cumulative_loss = 0.
-  total_correct = 0
-  all_preds = torch.tensor([], dtype = torch.int).to(args.device) 
-  all_true = torch.tensor([], dtype = torch.int).to(args.device)
-  s1_all_true = torch.tensor([], dtype = torch.int).to(args.device)
-  s2_all_true = torch.tensor([], dtype = torch.int).to(args.device)
+def test_step(args, model, data_loader, criterion, logger):
+  running_oa1, running_mca1_num, running_mca1_den = list(), list(), list()
+  running_oa2, running_mca2_num, running_mca2_den = list(), list(), list()
   model.eval() 
   logger.info("Start Testing")
-  with torch.no_grad():
-    for batch in data_loader:
-      data, (labels, s1_labels, s2_labels) = batch
-      preds = model(data)
-      loss = F.cross_entropy(preds,labels)
-      # update cumulative values
-      nb_samples += data.shape[0]
-      cumulative_loss += loss.item()
-      total_correct += get_num_correct(preds, labels)
-      # Save predictions
-      all_preds = torch.cat((all_preds, preds.argmax(dim=1).int()), dim=0)
-      all_true = torch.cat((all_true, labels.int()), dim=0)
-      # Save Super Labels Ground Truth
-      s1_all_true = torch.cat((s1_all_true, s1_labels.int()), dim=0)
-      s2_all_true = torch.cat((s2_all_true, s2_labels.int()), dim=0)
-      
-    # Save Super Labels 1 Predictions
-    s1_preds_list = [super_class(label)[1] for label in all_preds]
-    s1_all_preds = torch.tensor(s1_preds_list, dtype = torch.int).to(args.device)
-    # Save Super Labels 2 Predictions
-    s2_preds_list = [super_class(label)[2] for label in all_preds]
-    s2_all_preds = torch.tensor(s2_preds_list, dtype = torch.int).to(args.device)
-    # Compute average loss
-    average_loss = cumulative_loss / nb_samples
-    # Compute average accuracy
-    average_accuracy = total_correct / nb_samples * 100
-    # Confusion Matrix
-    all_preds = all_preds.tolist()
-    all_true = all_true.tolist()
-    cm_acc = confusion_matrix( all_true, all_preds, labels = sorted_s1_classes_idx,  normalize='true')
-    # Super Classes 1 Confusion Matrix
-    s1_all_true = s1_all_true.tolist()
-    s1_all_preds = s1_all_preds.tolist()
-    s1_cm_acc = confusion_matrix( s1_all_true, s1_all_preds, labels = list(range(5)),  normalize='true')
-    # Super Classes 2 Confusion Matrix
-    s2_all_true = s2_all_true.tolist()
-    s2_all_preds = s2_all_preds.tolist()
-    s2_cm_acc = confusion_matrix( s2_all_true, s2_all_preds, labels = list(range(13)),  normalize='true')
-    # Compute average accuracy
-    per_cls_avg_acc = cm_acc.diagonal().mean() * 100  
+  
+  for data in data_loader:
+    images, (s_labels, s1_labels, s2_labels) = data
+    with torch.inference_mode():
+      # Forward pass
+      if args.model_type == 'R50_2H':
+        logits1, logits2 = model(images)
+        _, preds1 = torch.max(logits1, dim=1)
+        _, preds2 = torch.max(logits2, dim=1)
+      elif args.model_type == 'R50_1H':
+        logits1 = model(images)
+        _, preds1 = torch.max(logits1, dim=1)
+        
+        tmp = np.load('mapping.npz')
+        mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+        logits2 = torch.mm(logits1, mapping) / (1e-6 + torch.sum(mapping, dim=0))
+        _, preds2 = torch.max(logits2, dim=1)
+    
+    # Update metrics
+    oa1 = torch.sum(preds1 == s_labels.squeeze()) / len(s_labels)
+    running_oa1.append(oa1.item())
+    mca1_num = torch.sum(
+        torch.nn.functional.one_hot(preds1, num_classes=40) * \
+        torch.nn.functional.one_hot(s_labels, num_classes=40), dim=0)
+    mca1_den = torch.sum(
+        torch.nn.functional.one_hot(s_labels, num_classes=40), dim=0)
+    running_mca1_num.append(mca1_num.detach().cpu().numpy())
+    running_mca1_den.append(mca1_den.detach().cpu().numpy())
 
-  return average_loss, average_accuracy, per_cls_avg_acc, cm_acc, s1_cm_acc, s2_cm_acc
+    oa2 = torch.sum(preds2 == s2_labels.squeeze()) / len(s2_labels)
+    running_oa2.append(oa2.item())
+    mca2_num = torch.sum(
+        torch.nn.functional.one_hot(preds2, num_classes=13) * \
+        torch.nn.functional.one_hot(s2_labels, num_classes=13), dim=0)
+    mca2_den = torch.sum(
+        torch.nn.functional.one_hot(s2_labels, num_classes=13), dim=0)
+    running_mca2_num.append(mca2_num.detach().cpu().numpy())
+    running_mca2_den.append(mca2_den.detach().cpu().numpy())
 
+  # Update MCA metric
+  mca1_num = np.sum(running_mca1_num, axis=0)
+  mca1_den = 1e-16 + np.sum(running_mca1_den, axis=0)
+  mca2_num = np.sum(running_mca2_num, axis=0)
+  mca2_den = 1e-16 + np.sum(running_mca2_den, axis=0)
+
+  stats = {
+      'oa1': np.mean(running_oa1),
+      'mca1': np.mean(mca1_num/mca1_den),
+      'oa2': np.mean(running_oa2),
+      'mca2': np.mean(mca2_num/mca2_den),
+      }
+    
+  return stats
 ######################################################################
 ##### Plotting utilities
 ######################################################################

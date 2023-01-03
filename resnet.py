@@ -21,9 +21,9 @@ class resnet50s(torch.nn.Module):
         self.backbone = resnet50
 
         # Heads
-        self.head1 = torch.nn.Linear(num_filters, args.num_categories1)
+        self.head1 = torch.nn.Linear(num_filters, 40)
         torch.nn.init.xavier_normal_(self.head1.weight)
-        self.head2 = torch.nn.Linear(num_filters, args.num_categories2)
+        self.head2 = torch.nn.Linear(num_filters, 13)
         torch.nn.init.xavier_normal_(self.head2.weight)
 
     def forward(self, x):
@@ -48,7 +48,7 @@ class resnet50s_1head(torch.nn.Module):
         self.backbone = resnet50
 
         # Head
-        self.head = torch.nn.Linear(num_filters, args.num_categories1)
+        self.head = torch.nn.Linear(num_filters, 40)
         torch.nn.init.xavier_normal_(self.head.weight)
 
     def forward(self, x):

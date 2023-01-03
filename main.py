@@ -13,6 +13,7 @@ import torch.optim as optim
 import matplotlib.pyplot as plt
 from torch.utils.data import random_split
 import numpy as np
+import torch.nn as nn
 
 from utils import *
 from datasets import *
@@ -28,7 +29,7 @@ def parse_args():
     parser.add_argument('--device', type=str, default='cuda', help='Computational Device')
     parser.add_argument('--num_workers', type=int, default=2)
     parser.add_argument('--seed', type=int, default=1234) # Similar to SENTRY's Seed
-    parser.add_argument('--freq_saving', type=int, default=10)
+    parser.add_argument('--freq_saving', type=int, default=5)
     
     # Model
     parser.add_argument('--model_type', type=str, required=True)
@@ -203,11 +204,11 @@ def main():
     ################################################################################################################
     
     if args.model_type == 'R50_2H':
-        model = resnet50s() 
+        model = resnet50s(args) 
         model = model.to(args.device)
         logger.info('Using Model with 2 heads')
     elif args.model_type == 'R50_1H':
-        model = resnet50s_1head() 
+        model = resnet50s_1head(args) 
         model = model.to(args.device)
         logger.info('Using Model with 1 head')
     else:
@@ -231,22 +232,22 @@ def main():
     ################################################################################################################
     
     # Setup optimizer
-    if model_type == 'R50_2H':
+    if args.model_type == 'R50_2H':
         head = ['head1.weight', 'head1.bias', 'head2.weight', 'head2.bias']
-    elif model_type == 'R50_1H':
+    elif args.model_type == 'R50_1H':
         head = ['head.weight', 'head.bias']
         
     params_head = list(filter(lambda kv: kv[0] in head, model.named_parameters()))
     params_back = list(filter(lambda kv: kv[0] not in head, model.named_parameters()))
     
-    logger.info('Learnable backbone parameters:')
-    for name, param in params_back:
-        if param.requires_grad is True:
-            logger.info(name)
-    logger.info('Learnable head parameters:')
-    for name, param in params_head:
-        if param.requires_grad is True:
-            logger.info(name)
+    # logger.info('Learnable backbone parameters:')
+    # for name, param in params_back:
+    #     if param.requires_grad is True:
+    #         logger.info(name)
+    # logger.info('Learnable head parameters:')
+    # for name, param in params_head:
+    #     if param.requires_grad is True:
+    #         logger.info(name)
             
     if args.optimizer == 'SGD':
         optimizer = torch.optim.SGD(
@@ -263,7 +264,7 @@ def main():
     
     
     # Get losses and send them to the device
-    criterion = loss_ce(reduction=args.reduction)
+    criterion = nn.CrossEntropyLoss(reduction=args.reduction)
     criterion = criterion.to(args.device)
     
     train_model(
