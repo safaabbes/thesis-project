@@ -19,7 +19,7 @@ from classes import *
 def train_baseline( s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, optimizer,  logger):  
   # Setting Wandb
   wandb.init(
-      project='{}'.format(args.task),
+      project='UnBalanced_{}'.format(args.task),
       name=args.exp,
       config = {
                 "source": args.source,
@@ -32,7 +32,9 @@ def train_baseline( s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, o
   #set starting time
   since = time.time()
   for epoch in range(args.n_epochs):
-    train_loss , train_accuracy = source_train_step(epoch, args, model,s_train_dl, optimizer, logger)
+    train_loss , train_accuracy, instances_list = source_train_step(epoch, args, model,s_train_dl, optimizer, logger)
+    if epoch == 0:
+      plot_samples_per_cls(instances_list)
     # Testing
     s_loss, s_test_accuracy, s_per_cls_avg_acc, s_cm, s1_s_cm, s2_s_cm= test_step(args, model,s_test_dl, logger)
     t_loss, t_test_accuracy, t_per_cls_avg_acc, t_cm, s1_t_cm, s2_t_cm = test_step(args, model,t_test_dl, logger)
@@ -58,7 +60,7 @@ def train_baseline( s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, o
   # Log time
   duration = time.time() - since
   logger.info('Training duration: {}'.format(str(datetime.timedelta(seconds=duration))))
-# Plot Confusion Matrix
+  # Plot Confusion Matrix
   fig, ax = plt.subplots(figsize=(50,50))
   plot_confusion_matrix(ax, fig, s_cm)
   wandb.log({"s_test/s_cm": wandb.Image(plt)})
@@ -116,6 +118,7 @@ def source_train_step(epoch, args, model, data_loader, optimizer, logger):
   total_correct = 0
   batch_step = 0
   model.train() 
+  instances_list = [0] * 40
   n_total_steps = len(data_loader)
   for batch in data_loader:
     data, (labels, _ ,_)  = batch
@@ -127,13 +130,15 @@ def source_train_step(epoch, args, model, data_loader, optimizer, logger):
     nb_samples += data.shape[0]
     cumulative_loss += loss.item()
     total_correct += get_num_correct(preds, labels)   
-    batch_step += 1
+    for label in labels:
+      instances_list[label] += 1
     if (batch_step + 1) % 200 == 0:
-      logger.info('Epoch [{}/{}], Step[{}/{}], Loss: {:.4f}'.format(epoch+1, args.n_epochs, batch_step+1,n_total_steps, loss.item()))    
+      logger.info('Epoch [{}/{}], Step[{}/{}], Loss: {:.4f}'.format(epoch+1, args.n_epochs, batch_step+1,n_total_steps, loss.item()))
+    batch_step += 1 
   # compute average loss and accuracy
   average_loss = cumulative_loss / nb_samples
   average_accuracy = total_correct / nb_samples * 100
-  return average_loss, average_accuracy 
+  return average_loss, average_accuracy, instances_list
 
 
 

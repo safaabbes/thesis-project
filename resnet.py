@@ -211,8 +211,9 @@ class Model_V1(nn.Module):
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))  
         self.fc = nn.Linear(in_features=2048, out_features=1000, bias=True)
-        self.fcb = nn.Linear(in_features=512, out_features=1000, bias=True)
-
+        self.fcb1 = nn.Linear(in_features=2048, out_features=1000, bias=True)
+        self.fcb2 = nn.Linear(in_features=2048, out_features=1000, bias=True)
+    
     def forward(self, x, path = 'main'):
         x = self.conv1(x)
         x = self.bn1(x)
@@ -220,20 +221,24 @@ class Model_V1(nn.Module):
         x = self.maxpool(x)
         x = self.layer1(x)
         x = self.layer2(x)
+
         if path == 'main':
-            f = self.layer3(x)
-            f = self.layer4(f)
-            f = self.avgpool(f)
+            x = self.layer3(x)
+            x = self.layer4(x)
+            f = self.avgpool(x)
             f = f.reshape(f.shape[0], -1)
             f = self.fc(f)
             return f
-        elif path == 'branch':
-            g = self.layer3(x)
-            g = self.layer4(g)
+        elif path == 'b1':
             g = self.avgpool(x)
             g = g.reshape(g.shape[0], -1)
-            g = self.fcb(g)
+            g = self.fcb1(g)
             return g 
+        elif path == 'b2':
+            h = self.avgpool(x)
+            h = h.reshape(h.shape[0], -1)
+            h = self.fcb2(h)
+            return h
         else:
             raise Exception("Error! Incorrect Path Specified") 
 
@@ -282,7 +287,8 @@ def Res50_V1(img_channel=3, num_classes=1000, n_super_classes = 5, pre_trained=T
                     param_target.data.copy_(param_source.data)
         # re-initialize classifier (fc)
         model.fc = nn.Linear(in_features=2048, out_features=num_classes, bias=True)
-        model.fcb = nn.Linear(in_features=512, out_features=n_super_classes, bias=True)
+        model.fcb1 = nn.Linear(in_features=2048, out_features=5, bias=True) #CLUSTER 1 CLASSIFIER
+        model.fcb2 = nn.Linear(in_features=2048, out_features=13, bias=True) #CLUSTER 2 CLASSIFIER
     return model
 
 

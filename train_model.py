@@ -16,28 +16,33 @@ from classes import *
 def train_model( s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, optimizer, logger):  
   # Setting Wandb
   wandb.init(
-      project='{}'.format(args.task), 
+      project='New_B4_{}'.format(args.task), 
       name=args.exp,
       config = {
                 "source": args.source,
                 "target": args.target,
                 "epochs": args.n_epochs,
                 "batch_size": args.bs,
+                "balance": args.cbt,
                 # New Hyper-parameters
-                "alpha": args.alpha,
-                "gamma": args.gamma,
+                "mu1": args.mu1,
+                "mu2": args.mu2,
+                "mu3": args.mu3,
                 })
   #set starting time
   since = time.time()
   # wandb.watch(model)
   for epoch in range(args.n_epochs):
     if args.task == 'run_model_v1':
-      s_avg_acc, sb_avg_acc, tb_avg_acc, all_losses = model_v1_train_step(epoch, args, model,s_train_dl, t_train_dl, optimizer, logger)
+      s_avg_acc, sb_avg_acc, tb_avg_acc, all_losses  = model_v1_train_step(epoch, args, model,s_train_dl, t_train_dl, optimizer, logger)
     elif args.task == 'run_model_v2':
-      s_avg_acc, sb_avg_acc, tb_avg_acc, all_losses = model_v2_train_step(epoch, args, model,s_train_dl, t_train_dl, optimizer, logger)
-    # MODEL V3
-    # s_avg_acc, sb_avg_acc, tb_avg_acc, all_losses = model_v3_train_step(epoch, args, model,s_train_dl, t_train_dl, optimizer, logger)
-    # Testing
+      s_avg_acc, sb_avg_acc, tb_avg_acc, all_losses  = model_v2_train_step(epoch, args, model,s_train_dl, t_train_dl, optimizer, logger)
+    elif args.task == 'run_model_v3':
+      s_avg_acc, sb_avg_acc, tb_avg_acc, all_losses = model_v3_train_step(epoch, args, model,s_train_dl, t_train_dl, optimizer, logger)
+    # Plot Samples Per Cls
+    # if epoch == 0:
+    #   plot_samples_per_cls(instances_list)
+    # Testing  
     s_test_loss, s_test_accuracy, s_per_cls_avg_acc, s_cm, s1_s_cm, s2_s_cm = test_step(args, model,s_test_dl, logger)
     t_test_loss, t_test_accuracy, t_per_cls_avg_acc, t_cm, s1_t_cm, s2_t_cm= test_step(args, model,t_test_dl, logger)
     # Log Results
@@ -135,6 +140,7 @@ def model_v1_train_step(epoch, args, model, source_dl, target_dl, optimizer, log
   cml_s_branch_loss = 0.
   cml_t_branch_loss = 0.
   cml_total_loss = 0.
+  # instances_list = [0] * 40
   logger.info("Start Training")
   model.train() 
   n_total_steps = max(len(source_dl), len(target_dl))
@@ -143,14 +149,14 @@ def model_v1_train_step(epoch, args, model, source_dl, target_dl, optimizer, log
     if batch_idx == n_total_steps:
       break
     # forward pass
-    main_preds = model(s_data, 'main')
-    s_branch_preds = model(s_data, 'branch')
-    t_branch_preds = model(t_data, 'branch')
+    main_preds = model(s_data)
+    s_branch_preds = model(s_data, 'b1')
+    t_branch_preds = model(t_data, 'b1')
     # loss computation
     main_loss = F.cross_entropy(main_preds, s_labels)
     s_branch_loss = F.cross_entropy(s_branch_preds, s_super_labels)
     t_branch_loss = F.cross_entropy(t_branch_preds, t_super_labels)
-    total_loss = main_loss + args.alpha*s_branch_loss + args.gamma*t_branch_loss
+    total_loss = args.mu1 * main_loss + args.mu2 * s_branch_loss + args.mu3 * t_branch_loss
     # backward pass
     total_loss.backward()
     # parameters update
@@ -167,6 +173,8 @@ def model_v1_train_step(epoch, args, model, source_dl, target_dl, optimizer, log
     sm_total_correct += get_num_correct(main_preds, s_labels)
     sb_total_correct += get_num_correct(s_branch_preds, s_super_labels)
     tb_total_correct += get_num_correct(t_branch_preds, t_super_labels)     
+    # for label in s_labels:
+    #   instances_list[label] += 1      
     # Logging update
     if (batch_idx + 1) % 200 == 0:
       logger.info('Epoch [{}/{}], Step[{}/{}], Loss: {:.4f}'.format(epoch+1, args.n_epochs, batch_idx+1,n_total_steps, main_loss.item()))
@@ -207,13 +215,13 @@ def model_v2_train_step(epoch, args, model, source_dl, target_dl, optimizer, log
       break
     # forward pass
     main_preds = model(s_data, 'main')
-    s_branch_preds = model(s_data, 'branch')
-    t_branch_preds = model(t_data, 'branch')
+    s_branch_preds = model(s_data, 'b2')
+    t_branch_preds = model(t_data, 'b2')
     # loss computation
     main_loss = F.cross_entropy(main_preds, s_labels)
     s_branch_loss = F.cross_entropy(s_branch_preds, s_super_labels)
     t_branch_loss = F.cross_entropy(t_branch_preds, t_super_labels)
-    total_loss = main_loss + args.alpha*s_branch_loss + args.gamma*t_branch_loss
+    total_loss = args.mu1 * main_loss + args.mu2 * s_branch_loss + args.mu3 * t_branch_loss
     # backward pass
     total_loss.backward()
     # parameters update
@@ -250,4 +258,82 @@ def model_v2_train_step(epoch, args, model, source_dl, target_dl, optimizer, log
   
   return s_avg_acc, sb_avg_acc, tb_avg_acc, all_losses
 
-
+def model_v3_train_step(epoch, args, model, source_dl, target_dl, optimizer, logger):
+  nb_source_samples = 0
+  nb_target_samples = 0
+  sm_total_correct = 0
+  sb1_total_correct = 0
+  tb1_total_correct = 0
+  sb2_total_correct = 0
+  tb2_total_correct = 0
+  cml_main_loss = 0.
+  cml_s1_branch_loss = 0.
+  cml_t1_branch_loss = 0.
+  cml_s2_branch_loss = 0.
+  cml_t2_branch_loss = 0.
+  cml_total_loss = 0.
+  # instances_list = [0] * 40
+  logger.info("Start Training")
+  model.train() 
+  n_total_steps = max(len(source_dl), len(target_dl))
+  for batch_idx, ((s_data, (s_labels,s1_super_labels,s2_super_labels)), (t_data, ( _ , t1_super_labels,t2_super_labels))) in enumerate(zip(cycle(source_dl), cycle(target_dl))):
+    if batch_idx == n_total_steps:
+      break
+    # forward pass
+    main_preds = model(s_data, 'main')
+    s1_branch_preds = model(s_data, 'b1')
+    t1_branch_preds = model(t_data, 'b1')
+    s2_branch_preds = model(s_data, 'b2')
+    t2_branch_preds = model(t_data, 'b2')
+    # loss computation
+    main_loss = F.cross_entropy(main_preds, s_labels)
+    s1_branch_loss = F.cross_entropy(s1_branch_preds, s1_super_labels)
+    t1_branch_loss = F.cross_entropy(t1_branch_preds, t1_super_labels)
+    s2_branch_loss = F.cross_entropy(s2_branch_preds, s2_super_labels)
+    t2_branch_loss = F.cross_entropy(t2_branch_preds, t2_super_labels)
+    total_loss = args.mu1 * main_loss + args.mu2 * s1_branch_loss + args.mu3 * t1_branch_loss + args.mu2 * s2_branch_loss + args.mu3 * t2_branch_loss
+    # backward pass
+    total_loss.backward()
+    # parameters update
+    optimizer.step()
+    # gradients reset
+    optimizer.zero_grad()
+    # fetch prediction and loss value
+    nb_source_samples += s_data.shape[0]
+    nb_target_samples += t_data.shape[0]
+    cml_main_loss += main_loss.item()
+    cml_s1_branch_loss += s1_branch_loss.item()
+    cml_t1_branch_loss += t1_branch_loss.item()
+    cml_s2_branch_loss += s2_branch_loss.item()
+    cml_t2_branch_loss += t2_branch_loss.item()
+    cml_total_loss += total_loss.item()
+    sm_total_correct += get_num_correct(main_preds, s_labels)
+    sb1_total_correct += get_num_correct(s1_branch_preds, s1_super_labels)
+    tb1_total_correct += get_num_correct(t1_branch_preds, t1_super_labels)     
+    sb2_total_correct += get_num_correct(s2_branch_preds, s2_super_labels)
+    tb2_total_correct += get_num_correct(t2_branch_preds, t2_super_labels)    
+    # for label in s_labels:
+    #   instances_list[label] += 1      
+    # Logging update
+    if (batch_idx + 1) % 200 == 0:
+      logger.info('Epoch [{}/{}], Step[{}/{}], Loss: {:.4f}'.format(epoch+1, args.n_epochs, batch_idx+1,n_total_steps, main_loss.item()))
+      
+  # Plot number of samples loaded 
+  logger.info('Number of Source Samples used {} / {}'.format(nb_source_samples , len(source_dl.dataset)))
+  logger.info('Number of Target Samples used {} / {}'.format(nb_target_samples , len(target_dl.dataset)))
+  # compute average losses
+  avg_main_loss = cml_main_loss / nb_source_samples
+  avg_s1_branch_loss = cml_s1_branch_loss / nb_source_samples
+  avg_t1_branch_loss = cml_t1_branch_loss / nb_source_samples
+  avg_s2_branch_loss = cml_s2_branch_loss / nb_source_samples
+  avg_t2_branch_loss = cml_t2_branch_loss / nb_source_samples
+  avg_total_loss = cml_total_loss / nb_source_samples
+  all_losses = [avg_main_loss, avg_s1_branch_loss, avg_t1_branch_loss, avg_total_loss]
+  # compute average accuracies
+  s_avg_acc = sm_total_correct / nb_source_samples * 100
+  sb1_avg_acc = sb1_total_correct / nb_source_samples * 100
+  tb1_avg_acc = tb1_total_correct / nb_target_samples * 100
+  sb2_avg_acc = sb2_total_correct / nb_source_samples * 100
+  tb2_avg_acc = tb2_total_correct / nb_target_samples * 100
+  
+  return s_avg_acc, sb1_avg_acc, tb1_avg_acc, all_losses

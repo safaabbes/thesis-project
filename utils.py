@@ -10,6 +10,7 @@ import torch.optim as optim
 import itertools
 import seaborn as sns
 from sklearn.metrics import confusion_matrix
+import wandb
 
 from classes import *
 
@@ -112,6 +113,21 @@ def plot_confusion_matrix(ax, fig, cm):
       ylabel.set_color('y')
   plt.ylabel('Ground Truth')
   plt.xlabel('Predicted')
+
+def plot_samples_per_cls(instances_list):
+  labels = main_classes
+  values = instances_list
+  data = [[label, val] for (label, val) in zip(labels, values)]
+  table = wandb.Table(data=data, columns = ["Classes", "Number of Samples"])
+  wandb.log({"DS" : wandb.plot.bar(table, "Classes", "Number of Samples", title="DS Set")})
+  
+  # fig, ax = plt.subplots(figsize=(50,50))
+  # x = list(range(40))  
+  # plt.rcParams.update({'font.size': 22})
+  # plt.barh(x, y, tick_label = tick_label, color = ['red', 'green']) 
+  # for index, value in enumerate(y): plt.text(value, index, str(value))
+  # plt.title('Instances of labels over 20 mini-batches with balance = {}'.format(args.cbt))
+  # wandb.log({'bar': wandb.Image(plt)})
 
 ######################################################################
 ##### Optimization utilities

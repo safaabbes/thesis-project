@@ -5,16 +5,18 @@ sbatch --gres=gpu:1 --mem 32GB -p gpu-V100 real.sh (node5) (WORKS!) \
 sbatch --gres=gpu:1 --mem 32GB -p gpu-1080 real.sh (FAILED) (even for other domains with target real) \
 sbatch --gres=gpu:2 --mem 32GB -p gpu-1080 real.sh (FAILED) (even for other domains with target real) \
 sbatch --gres=gpu:1 --mem 32GB -p gpu-V100 real.sh (node8) (FAILED) (even for other domains with target real) \
-sbatch --gres=gpu:1 --mem 32GB -p gpu-V100 real.sh (node81) (FAILED) (weird error: warnings.warn(incompatible_device_warn.format(device_name, capability, " ".join(arch_list), device_name)) 
+sbatch --gres=gpu:1 --mem 32GB -p gpu-V100 real.sh (node81) (FAILED) :
+  warnings.warn(incompatible_device_warn.format(device_name, capability, " ".join(arch_list), device_name))
+  SOVLED: update CUDA version from cu102 to cu116 for torch and torchvision
 
 
 ### TODO List
 (13/12/2022)
-- [ ] Focus on 1 domain: Sketch
-- [ ] Analyse WeightedRandomSample over a few batches
-- [ ] Analyze baseline with balancing
-- [ ] Analyze Model 1 and 2 without balancing
-- [ ] Change branch position and run different trainings
+- [x] Analyse WeightedRandomSample over a few batches
+- [x] Analyze baseline with and without balancing
+- [ ] Discuss New Prediction implementation giving the SSAL paper
+- [ ] Analyze Model 1 and 2 without balancing (Sketch Only)
+- [ ] Change branch position and run different trainings (Sketch Only)
 - [ ] Create the function Massimiliano explained (menghir branches, ba3d mayaamel il preds menhom yestakhrej il preds 3al superclasses w yakhla9 output kima mta3 fcb ema basé 3al output mta3 main)
 
 

@@ -3,6 +3,7 @@ import argparse
 import sys
 import pathlib
 import shutil
+import distutils
 
 from torchsummary import summary
 import torchvision
@@ -27,22 +28,23 @@ def parse_args():
     parser.add_argument('--device', type=str, default='cuda', help='Computational Device')
     parser.add_argument('--num_workers', type=int, default=2)
     parser.add_argument('--seed', type=int, default=1234) # Similar to SENTRY's Seed
-    parser.add_argument('--task', type=str, default='run_model_v1',help='Run Baseline or New Model')
+    parser.add_argument('--task', type=str, required=True, choices= ['run_model_v1','run_model_v2','run_model_v3', 'run_original_baseline', 'run_sentry_baseline'],help='Run Baseline or New Model')
     parser.add_argument('--freq_saving', type=int, default=10)
 
     # Train
     parser.add_argument('--bs', type=int, default=16)
     parser.add_argument('--n_epochs', type=int, default=50)
-    parser.add_argument('--cbt', type=str, default= 'True', help='Class Balance Train')
+    parser.add_argument('--cbt', type=lambda x:bool(distutils.util.strtobool(x)), help='Source Class Balance Train')
     
     # Data
     parser.add_argument('--path', type=str, default='/storage/TEV/sabbes/domainnet40/', help='Dataset Path')
     parser.add_argument('--source', type=str, required=True, help='Source Domain Name')
     parser.add_argument('--target', type=str, required=True, help='Target Domain Name')
     
-    # Super Classes Hyper-parameters	
-    parser.add_argument('--alpha', type=float, default= 0.5, help='Weight of the loss of Source Branch')
-    parser.add_argument('--gamma', type=float, default= 0.5, help='Weight of the loss of Target Branch')
+    # Super Classes Hyper-parameters
+    parser.add_argument('--mu1', type=float, default= 0.33, help='Weight of the loss of Main Branch')	
+    parser.add_argument('--mu2', type=float, default= 0.33, help='Weight of the loss of Source Branch')
+    parser.add_argument('--mu3', type=float, default= 0.33, help='Weight of the loss of Target Branch')
     
     # Fixed Hyperparameters for Consistenty with the current baseline and previous papers (SENTRY)
     parser.add_argument('--lr', type=float, default= 1e-3, help='Learning Rate')
@@ -65,7 +67,6 @@ def main():
     # Log library versions
     logger.info('PyTorch version = {:s}'.format(torch.__version__))
     logger.info('TorchVision version = {:s}'.format(torchvision.__version__))
-    
     # Activate CUDNN backend (https://discuss.pytorch.org/t/what-does-torch-backends-cudnn-benchmark-do/5936)
     torch.backends.cudnn.enabled = True
 
@@ -93,12 +94,30 @@ def main():
     source_ds = DomainNetDataset40(args.source, args.path)
     
     s_train_ds, s_test_ds = source_ds.get_dataset()
-    s_train_dl, s_test_dl = source_ds.get_dataloaders(train_ds = s_train_ds, test_ds = s_test_ds, batch_size = args.bs , class_balance_train = args.cbt)
+    if args.cbt == True:
+        s_train_idx = np.arange(len(s_train_ds))
+        y_train = [s_train_ds.targets[i] for i in s_train_idx]
+        count = dict(Counter(s_train_ds.targets))
+        class_sample_count = np.array(list(count.values()))
+        # Find weights for each class
+        weight = 1. / class_sample_count
+        samples_weight = np.array([weight[t] for (t,_,_) in y_train])
+        samples_weight = torch.from_numpy(samples_weight)
+        # Create Weighted Random Sampler
+        train_sampler = WeightedRandomSampler(
+        weights= samples_weight.type('torch.DoubleTensor'),
+        num_samples= len(samples_weight),)
+        s_train_dl = torch.utils.data.DataLoader(s_train_ds, batch_size=args.bs, sampler=train_sampler, num_workers=args.num_workers)
+    else:
+        s_train_dl = torch.utils.data.DataLoader(s_train_ds, batch_size=args.bs, shuffle=True, num_workers=args.num_workers)
+        
+    s_test_dl = torch.utils.data.DataLoader(s_test_ds, batch_size=args.bs, shuffle=False) 
 
     logger.info('number of train samples of {} dataset: {}'.format(args.source, len(s_train_ds)))
     logger.info('number of test samples of {} dataset: {}'.format(args.source, len(s_test_ds)))
     logger.info('len of {} train dataloader {}'.format(args.source, len(s_train_dl)))
     logger.info('len of {} test dataloader {}'.format(args.source, len(s_test_dl)))
+    logger.info('Class Balance of Source Train Dataset {}'.format(args.cbt))
     
     # Move Data to GPU
     s_train_dl = DeviceDataLoader(s_train_dl, args.device)
@@ -111,12 +130,13 @@ def main():
     target_ds = DomainNetDataset40(args.target, args.path)
     
     t_train_ds, t_test_ds = target_ds.get_dataset()
-    t_train_dl, t_test_dl = target_ds.get_dataloaders(train_ds = t_train_ds, test_ds = t_test_ds, batch_size = args.bs)
+    
+    t_train_dl = torch.utils.data.DataLoader(t_train_ds, batch_size=args.bs, shuffle=True, num_workers=args.num_workers)        
+    t_test_dl = torch.utils.data.DataLoader(t_test_ds, batch_size=args.bs, shuffle=False) 
 
     logger.info('number of train samples of {} dataset: {}'.format(args.target, len(t_train_ds)))
     logger.info('number of test samples of {} dataset: {}'.format(args.target, len(t_test_ds)))
     logger.info('len of {} train dataloader {}'.format(args.target, len(t_train_dl)))
-    
     logger.info('len of {} test dataloader {}'.format(args.target, len(t_test_dl)))
     
     # Move Data to GPU
@@ -137,7 +157,7 @@ def main():
         model = ResNet50(num_classes=40) 
         model = model.to(args.device, non_blocking= True)
         logger.info('Baseline Training with Original ResNet50')
-    elif args.task == 'run_model_v1':
+    elif args.task == 'run_model_v3':
         # Testing Model v1
         model = Res50_V1(num_classes=40, n_super_classes=5)
         model = model.to(args.device, non_blocking= True)
