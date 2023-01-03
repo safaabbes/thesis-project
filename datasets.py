@@ -122,27 +122,3 @@ class DomainNetDataset40():
         
               
         return  self.train_data, self.test_data
-
-    def get_dataloaders(self, train_ds, test_ds, num_workers= 1, batch_size=64, class_balance_train = False):
-        
-        train_idx = np.arange(len(train_ds))
-        if class_balance_train: 
-            y_train = [train_ds.targets[i] for i in train_idx]
-            count = dict(Counter(train_ds.targets))
-            class_sample_count = np.array(list(count.values()))
-            # Find weights for each class
-            weight = 1. / class_sample_count
-            samples_weight = np.array([weight[t] for (t,_,_) in y_train])
-            samples_weight = torch.from_numpy(samples_weight)
-            # Create Weighted Random Sampler
-            train_sampler = WeightedRandomSampler(
-                weights= samples_weight.type('torch.DoubleTensor'),
-                num_samples= len(samples_weight),
-                )
-        else:
-            train_sampler = SubsetRandomSampler(train_idx)
-        
-        train_loader = torch.utils.data.DataLoader(train_ds, batch_size=batch_size, sampler = train_sampler, num_workers=num_workers)
-        test_loader = torch.utils.data.DataLoader(test_ds, batch_size=batch_size, shuffle=False) 
-        
-        return train_loader, test_loader
