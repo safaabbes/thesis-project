@@ -32,6 +32,13 @@ class resnet50s(torch.nn.Module):
         score1 = self.head1(x) / self.temperature
         score2 = self.head2(x) / self.temperature
         return score1, score2
+    
+    def load(self, init_path):
+        net_init_dict = torch.load(init_path, map_location=torch.device('cpu'))
+        self.load_state_dict(net_init_dict)
+
+    def save(self, out_path):
+        torch.save(self.state_dict(), out_path)
 
 
 class resnet50s_1head(torch.nn.Module):
@@ -56,6 +63,13 @@ class resnet50s_1head(torch.nn.Module):
         x = F.normalize(x)
         score1 = self.head(x) / self.temperature
         return score1
+    
+    def load(self, init_path):
+        net_init_dict = torch.load(init_path, map_location=torch.device('cpu'))
+        self.load_state_dict(net_init_dict)
+
+    def save(self, out_path):
+        torch.save(self.state_dict(), out_path)
 
 ######################################################################
 ##### SENTRY IMPLEMENTATION

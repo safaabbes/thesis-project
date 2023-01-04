@@ -83,10 +83,10 @@ def test_step(args, model, data_loader, criterion, logger):
   mca2_den = 1e-16 + np.sum(running_mca2_den, axis=0)
 
   stats = {
-      'oa1': np.mean(running_oa1),
-      'mca1': np.mean(mca1_num/mca1_den),
-      'oa2': np.mean(running_oa2),
-      'mca2': np.mean(mca2_num/mca2_den),
+      'oa1': np.mean(running_oa1)*100,
+      'mca1': np.mean(mca1_num/mca1_den)*100,
+      'oa2': np.mean(running_oa2)*100,
+      'mca2': np.mean(mca2_num/mca2_den)*100,
       }
     
   return stats

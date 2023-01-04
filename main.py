@@ -47,6 +47,7 @@ def parse_args():
     
     # Loss
     parser.add_argument('--reduction', type=str, default='sum')
+    parser.add_argument('--mean_bs', type=type=lambda x:bool(distutils.util.strtobool(x)), default= False, help='use reduction mean and multiply loss with bs')
     parser.add_argument('--mu1', type=float, default= 0.33, help='Weight of the loss of Main Branch')	
     parser.add_argument('--mu2', type=float, default= 0.33, help='Weight of the loss of Source Branch')
     parser.add_argument('--mu3', type=float, default= 0.33, help='Weight of the loss of Target Branch')
@@ -153,34 +154,34 @@ def main():
     
     t_train_ds, t_test_ds = target_ds.get_dataset()
     
-    if args.balance_mini_batches == True:
-        t_train_idx = np.arange(len(t_train_ds))
-        y_train = [t_train_ds.targets[i] for i in t_train_idx]
-        count = dict(Counter(t_train_ds.targets))
-        class_sample_count = np.array(list(count.values()))
-        # Find weights for each class
-        weight = 1. / class_sample_count
-        samples_weight = np.array([weight[t] for (t,_,_) in y_train])
-        samples_weight = torch.from_numpy(samples_weight)
-        # Create Weighted Random Sampler
-        train_sampler = WeightedRandomSampler(
-        weights= samples_weight.type('torch.DoubleTensor'),
-        num_samples= len(samples_weight),)
-        t_train_dl = torch.utils.data.DataLoader(
-            dataset=t_train_ds, 
-            batch_size=args.bs, 
-            sampler=train_sampler, 
-            num_workers=args.num_workers,
-            pin_memory=True,
-            drop_last=True)
-    else:
-        t_train_dl = torch.utils.data.DataLoader(
-            dataset=t_train_ds, 
-            batch_size=args.bs, 
-            shuffle=True, 
-            num_workers=args.num_workers,
-            pin_memory=True,
-            drop_last=True)
+    # if args.balance_mini_batches == True:
+    #     t_train_idx = np.arange(len(t_train_ds))
+    #     y_train = [t_train_ds.targets[i] for i in t_train_idx]
+    #     count = dict(Counter(t_train_ds.targets))
+    #     class_sample_count = np.array(list(count.values()))
+    #     # Find weights for each class
+    #     weight = 1. / class_sample_count
+    #     samples_weight = np.array([weight[t] for (t,_,_) in y_train])
+    #     samples_weight = torch.from_numpy(samples_weight)
+    #     # Create Weighted Random Sampler
+    #     train_sampler = WeightedRandomSampler(
+    #     weights= samples_weight.type('torch.DoubleTensor'),
+    #     num_samples= len(samples_weight),)
+    #     t_train_dl = torch.utils.data.DataLoader(
+    #         dataset=t_train_ds, 
+    #         batch_size=args.bs, 
+    #         sampler=train_sampler, 
+    #         num_workers=args.num_workers,
+    #         pin_memory=True,
+    #         drop_last=True)
+    # else:
+    t_train_dl = torch.utils.data.DataLoader(
+        dataset=t_train_ds, 
+        batch_size=args.bs, 
+        shuffle=True, 
+        num_workers=args.num_workers,
+        pin_memory=True,
+        drop_last=True)
         
     t_test_dl = torch.utils.data.DataLoader(
         dataset=t_test_ds, 

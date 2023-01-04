@@ -26,6 +26,7 @@ def train_model( s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, opti
                 "balance": args.balance_mini_batches,
                 "lr": args.lr,
                 "reduction": args.reduction,
+                "mean_bs": args.mean_bs,
                 "mu1": args.mu1,
                 "mu2": args.mu2,
                 "mu3": args.mu3,
@@ -46,10 +47,10 @@ def train_model( s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, opti
     # if (epoch) % args.freq_saving == 0:
     logger.info('Epoch: {:d}'.format(epoch+1)) 
     logger.info('\t Source Test Accuracies')
-    logger.info('\t S_OA1: {:.4f}, S_MCA1: {:.4f}, S_OA2: {:.4f}, S_MCA2: {:.4f}'.format(
+    logger.info('\t S_OA1: {:.2f}, S_MCA1: {:.2f}, S_OA2: {:.2f}, S_MCA2: {:.2f}'.format(
         s_test_stats['oa1'], s_test_stats['mca1'], s_test_stats['oa2'], s_test_stats['mca2']))
     logger.info('\t Target Test Accuracies')
-    logger.info('\t T_OA1: {:.4f}, T_MCA1: {:.4f}, T_OA2: {:.4f}, T_MCA2: {:.4f}'.format(
+    logger.info('\t T_OA1: {:.2f}, T_MCA1: {:.2f}, T_OA2: {:.2f}, T_MCA2: {:.2f}'.format(
         t_test_stats['oa1'], t_test_stats['mca1'], t_test_stats['oa2'], t_test_stats['mca2']))
     logger.info('-----------------------------------------------------------------------')
     
@@ -136,6 +137,8 @@ def train_step_2H(epoch, args, model, source_dl, target_dl, optimizer, criterion
     s_branch_loss = args.mu2 * criterion(logits2_source, s2_super_labels)
     t_branch_loss = args.mu3 * criterion(logits2_target, t2_super_labels)
     loss = main_loss + s_branch_loss + t_branch_loss
+    if args.mean_bs == True:
+      loss = loss * args.bs
 
     # Back-propagation
     loss.backward()
@@ -193,10 +196,10 @@ def train_step_2H(epoch, args, model, source_dl, target_dl, optimizer, criterion
     'loss1_source': np.mean(running_loss1_source),
     'loss2_source': np.mean(running_loss2_source),
     'loss2_target': np.mean(running_loss2_target),
-    'oa1': np.mean(running_oa1),
-    'mca1': np.mean(mca1_num/mca1_den),
-    'oa2': np.mean(running_oa2),
-    'mca2': np.mean(mca2_num/mca2_den)
+    'oa1': np.mean(running_oa1)*100,
+    'mca1': np.mean(mca1_num/mca1_den)*100,
+    'oa2': np.mean(running_oa2)*100,
+    'mca2': np.mean(mca2_num/mca2_den)*100
       }
   
   return stats
@@ -257,7 +260,9 @@ def train_step_1H(epoch, args, model, source_dl, target_dl, optimizer, criterion
     s_branch_loss = args.mu2 * criterion(logits2_source, s2_super_labels)
     t_branch_loss = args.mu3 * criterion(logits2_target, t2_super_labels)
     loss = main_loss + s_branch_loss + t_branch_loss
-
+    if args.mean_bs == True:
+      loss = loss * args.bs
+      
     # Back-propagation
     loss.backward()
 
@@ -314,10 +319,10 @@ def train_step_1H(epoch, args, model, source_dl, target_dl, optimizer, criterion
     'loss1_source': np.mean(running_loss1_source),
     'loss2_source': np.mean(running_loss2_source),
     'loss2_target': np.mean(running_loss2_target),
-    'oa1': np.mean(running_oa1),
-    'mca1': np.mean(mca1_num/mca1_den),
-    'oa2': np.mean(running_oa2),
-    'mca2': np.mean(mca2_num/mca2_den)
+    'oa1': np.mean(running_oa1)*100,
+    'mca1': np.mean(mca1_num/mca1_den)*100,
+    'oa2': np.mean(running_oa2)*100,
+    'mca2': np.mean(mca2_num/mca2_den)*100
       }
   
   return stats
