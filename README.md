@@ -1,30 +1,29 @@
 # thesis-project
 
-CUDA OUT OF MEMORY TRACKS:  <br />
-sbatch --gres=gpu:1 --mem 32GB -p gpu-V100 real.sh (node5) (WORKS!) \
-sbatch --gres=gpu:1 --mem 32GB -p gpu-1080 real.sh (FAILED) (even for other domains with target real) \
-sbatch --gres=gpu:2 --mem 32GB -p gpu-1080 real.sh (FAILED) (even for other domains with target real) \
-sbatch --gres=gpu:1 --mem 32GB -p gpu-V100 real.sh (node8) (FAILED) (even for other domains with target real) \
-sbatch --gres=gpu:1 --mem 32GB -p gpu-V100 real.sh (node81) (FAILED) :
-  warnings.warn(incompatible_device_warn.format(device_name, capability, " ".join(arch_list), device_name))
-  SOVLED: update CUDA version from cu102 to cu116 for torch and torchvision
-
-
 ### TODO List
-(13/12/2022)
-- [x] Analyse WeightedRandomSample over a few batches
-- [x] Analyze baseline with and without balancing
-- [ ] Discuss New Prediction implementation giving the SSAL paper
-- [ ] Analyze Model 1 and 2 without balancing (Sketch Only)
-- [ ] Change branch position and run different trainings (Sketch Only)
-- [ ] Create the function Massimiliano explained (menghir branches, ba3d mayaamel il preds menhom yestakhrej il preds 3al superclasses w yakhla9 output kima mta3 fcb ema basé 3al output mta3 main)
 
-
-- [ ] Create a "confusion matrix" that computes the difference between the baseline and the new model to see the influence of super-classes
-- [ ] Run Model V1 Training with 50 epochs, gamma=alpha=0.5 on all directions 
+(20/12/2022)
+- [ ] Implement Pseudo Labels
+- [x] Analyse difference between reduction sum and mean (sum = mean*bs, reduction sum fails with lr=0.01, instead mean+lr=0.01 acheive similar performance as reduction sum + lr 0.001)
+- [x] Resolve difference between code versions 
+- [ ] Try clustering word embeddings of class names to create superclasses 
+- [ ] Try K-means clustering to create super classes 
 - [ ] implement Grad-Cam and vizualize fixed samples
-- [ ] Try to make hyperparameter fine-tuning with wandb sweep
-- [ ] Implement v3 model (2 cluster model)
+- [ ] Create a "confusion matrix" that computes the difference between the baseline and the new model to see the influence of super-classes
+- [ ] Try Tests with CLIP (https://github.com/openai/CLIP)
+- [ ] check for new papers mentioning SENTRY
+
+(13/12/2022)
+- [x] Analyse WeightedRandomSample over a few batches 
+- [x] Analyze baseline with and without balancing
+- [x] Discuss New Prediction implementation giving the SSAL paper
+- [x] Analyze Model 1 and 2 without balancing (Sketch Only)
+- [x] Change branch position and run different trainings (Sketch Only)
+- [x] Create the function Massimiliano explained (menghir branches, ba3d mayaamel il preds menhom yestakhrej il preds 3al superclasses w yakhla9 output kima mta3 fcb ema basé 3al output mta3 main)
+- [x] Run Model V1 Training with 50 epochs, gamma=alpha=0.5 on all directions 
+- [x] Implement v3 model (2 cluster model)
+- [ ] implement Grad-Cam and vizualize fixed samples
+- [ ] Create a "confusion matrix" that computes the difference between the baseline and the new model to see the influence of super-classes
 - [ ] Try Tests with CLIP (https://github.com/openai/CLIP)
 - [ ] check for new papers mentioning SENTRY
 
