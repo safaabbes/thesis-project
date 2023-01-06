@@ -10,7 +10,7 @@ full_data = {}
 for domain in domains:
     for data_split in data_splits:
         # Get data
-        label_path = "/scratch/TEV/sabbes/src/data/DomainNet/txt/{}_{}_mini.txt".format(domain, data_split)
+        label_path = "../../data/splits_baseline/{}_{}_mini.txt".format(domain, data_split)
         with open(label_path, "r") as f:
             data_list = [line.strip("\n") for line in f.readlines()] 
         # remove the assigned label integer 
@@ -20,7 +20,7 @@ for domain in domains:
         image_paths = [pathlib.Path(data_item) for data_item in data]
         class_splits[data_split] = image_paths
 
-    target_dir_name = "/storage/TEV/sabbes/domainnet40/{}".format(domain)
+    target_dir_name = "../../data/domainnet40/{}".format(domain)
     print(f"Creating directory: '{target_dir_name}'")
 
     # Setup the directories
@@ -28,13 +28,13 @@ for domain in domains:
 
     # Make the directories
     target_dir.mkdir(parents=True, exist_ok=True)
-        for image_split in class_splits.keys():
-            for image_path in class_splits[str(image_split)]:
-                source_path = '/storage/TEV/sabbes/domainnet/' + str(image_path)
-                dest_dir = target_dir / image_split / image_path.parent.stem / image_path.name
-                if not dest_dir.parent.is_dir():
-                    dest_dir.parent.mkdir(parents=True, exist_ok=True)
-                print(f"[INFO] Copying {image_path} to {dest_dir}...")
-                shutil.copy2(source_path, dest_dir)
+    for image_split in class_splits.keys():
+        for image_path in class_splits[str(image_split)]:
+            source_path = '../../data/' + str(image_path)
+            dest_dir = target_dir / image_split / image_path.parent.stem / image_path.name
+            if not dest_dir.parent.is_dir():
+                dest_dir.parent.mkdir(parents=True, exist_ok=True)
+            print(f"[INFO] Copying {image_path} to {dest_dir}...")
+            shutil.copy2(source_path, dest_dir)
     class_splits = {}     
     

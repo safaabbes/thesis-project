@@ -41,13 +41,13 @@ def parse_args():
     parser.add_argument('--balance_mini_batches', type=lambda x:bool(distutils.util.strtobool(x)), required=True)
     
     # Data
-    parser.add_argument('--path', type=str, default='/storage/TEV/sabbes/domainnet40/', help='Dataset Path')
+    parser.add_argument('--path', type=str, default='../../data/domainnet40/', help='Dataset Path')
     parser.add_argument('--source', type=str, required=True, help='Source Domain Name')
     parser.add_argument('--target', type=str, required=True, help='Target Domain Name')
     
     # Loss
     parser.add_argument('--reduction', type=str, default='sum')
-    parser.add_argument('--mean_bs', type=type=lambda x:bool(distutils.util.strtobool(x)), default= False, help='use reduction mean and multiply loss with bs')
+    parser.add_argument('--mean_bs', type=lambda x:bool(distutils.util.strtobool(x)), default= False, help='use reduction mean and multiply loss with bs')
     parser.add_argument('--mu1', type=float, default= 0.33, help='Weight of the loss of Main Branch')	
     parser.add_argument('--mu2', type=float, default= 0.33, help='Weight of the loss of Source Branch')
     parser.add_argument('--mu3', type=float, default= 0.33, help='Weight of the loss of Target Branch')
@@ -66,9 +66,15 @@ def main():
     # Parse input arguments
     args = parse_args()
     
+    # Update path to weights and runs
+    args.path_weights = os.path.join('..', '..', 'exps_v1', 'weights', args.exp)
+    args.path_runs = os.path.join('..', '..', 'exps_v1', 'runs', args.exp)
+
+    # Create experiment folder
+    os.makedirs(args.path_weights, exist_ok=True)
+
     # Create logger
-    path_log= os.path.join('../logs', 'train_{}.log'.format(args.exp))
-    logger = setup_logger(path_log)
+    logger = get_logger(os.path.join(args.path_weights, 'log_train.txt'))
 
     # Log library versions
     logger.info('PyTorch version = {:s}'.format(torch.__version__))
@@ -154,34 +160,34 @@ def main():
     
     t_train_ds, t_test_ds = target_ds.get_dataset()
     
-    # if args.balance_mini_batches == True:
-    #     t_train_idx = np.arange(len(t_train_ds))
-    #     y_train = [t_train_ds.targets[i] for i in t_train_idx]
-    #     count = dict(Counter(t_train_ds.targets))
-    #     class_sample_count = np.array(list(count.values()))
-    #     # Find weights for each class
-    #     weight = 1. / class_sample_count
-    #     samples_weight = np.array([weight[t] for (t,_,_) in y_train])
-    #     samples_weight = torch.from_numpy(samples_weight)
-    #     # Create Weighted Random Sampler
-    #     train_sampler = WeightedRandomSampler(
-    #     weights= samples_weight.type('torch.DoubleTensor'),
-    #     num_samples= len(samples_weight),)
-    #     t_train_dl = torch.utils.data.DataLoader(
-    #         dataset=t_train_ds, 
-    #         batch_size=args.bs, 
-    #         sampler=train_sampler, 
-    #         num_workers=args.num_workers,
-    #         pin_memory=True,
-    #         drop_last=True)
-    # else:
-    t_train_dl = torch.utils.data.DataLoader(
-        dataset=t_train_ds, 
-        batch_size=args.bs, 
-        shuffle=True, 
-        num_workers=args.num_workers,
-        pin_memory=True,
-        drop_last=True)
+    if args.balance_mini_batches == True:
+        t_train_idx = np.arange(len(t_train_ds))
+        y_train = [t_train_ds.targets[i] for i in t_train_idx]
+        count = dict(Counter(t_train_ds.targets))
+        class_sample_count = np.array(list(count.values()))
+        # Find weights for each class
+        weight = 1. / class_sample_count
+        samples_weight = np.array([weight[t] for (t,_,_) in y_train])
+        samples_weight = torch.from_numpy(samples_weight)
+        # Create Weighted Random Sampler
+        train_sampler = WeightedRandomSampler(
+        weights= samples_weight.type('torch.DoubleTensor'),
+        num_samples= len(samples_weight),)
+        t_train_dl = torch.utils.data.DataLoader(
+            dataset=t_train_ds, 
+            batch_size=args.bs, 
+            sampler=train_sampler, 
+            num_workers=args.num_workers,
+            pin_memory=True,
+            drop_last=True)
+    else:
+        t_train_dl = torch.utils.data.DataLoader(
+            dataset=t_train_ds, 
+            batch_size=args.bs, 
+            shuffle=True, 
+            num_workers=args.num_workers,
+            pin_memory=True,
+            drop_last=True)
         
     t_test_dl = torch.utils.data.DataLoader(
         dataset=t_test_ds, 

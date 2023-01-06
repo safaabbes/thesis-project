@@ -16,7 +16,7 @@ from classes import *
 def train_model( s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, optimizer, criterion, logger):  
   # Setting Wandb
   wandb.init(
-      project='EXP0', 
+      project='src_version_1', 
       name=args.exp,
       config = {"model_type": args.model_type,
                 "source": args.source,
@@ -54,7 +54,7 @@ def train_model( s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, opti
         t_test_stats['oa1'], t_test_stats['mca1'], t_test_stats['oa2'], t_test_stats['mca2']))
     logger.info('-----------------------------------------------------------------------')
     
-    # Log results to Wandb 
+    # # Log results to Wandb 
     wandb.log({
         "epoch": epoch,
         # Train Accuracies
@@ -77,19 +77,14 @@ def train_model( s_train_dl, s_test_dl, t_train_dl, t_test_dl, model, args, opti
   duration = time.time() - since
   logger.info('Training duration: {}'.format(str(datetime.timedelta(seconds=duration))))
   # Savings 
-  torch.save({
-    'epoch': epoch,
-    'args': args,
-    'model_state_dict': model.module.state_dict() if hasattr(model, 'module') else model.state_dict()
-    },'/storage/TEV/sabbes/model_weights_{}.pth'.format(args.exp))
-  # Savings on Wandb
-  if hasattr(model, 'module'):
-    model.module.save(os.path.join(wandb.run.dir, "model.{}".format(args.exp)))
-  else:
-    model.save(os.path.join(wandb.run.dir, "model.{}".format(args.exp)))
   wandb.finish()
-  
-
+    # Save last checkpoint
+  torch.save({
+      'epoch': epoch,
+      'args': args,
+      'model_state_dict': model.module.state_dict() if hasattr(model, 'module') else model.state_dict()},
+      os.path.join(args.path_weights, 'last.tar'))
+    
 def train_step_2H(epoch, args, model, source_dl, target_dl, optimizer, criterion, logger):
   nb_source_samples, nb_target_samples = 0,0
   running_loss, running_loss1_source, running_loss2_source, running_loss2_target = list(), list(), list(), list()
