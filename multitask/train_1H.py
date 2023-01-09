@@ -10,6 +10,7 @@ import torch
 import torchvision
 import torchinfo
 import pytorch_warmup as warmup
+import wandb
 
 
 from datasets import dataset2 as dataset
@@ -36,10 +37,10 @@ def parse_args():
     parser.add_argument('--balance_mini_batches', default=False, action='store_true')
 
     # Data
-    parser.add_argument('--path_split_train_source', type=str, required=True)
-    parser.add_argument('--path_split_valid_source', type=str, required=True)
-    parser.add_argument('--path_split_train_target', type=str, required=True)
-    parser.add_argument('--path_split_valid_target', type=str, required=True)
+    parser.add_argument('--source_train', type=str, required=True)
+    parser.add_argument('--source_test', type=str, required=True)
+    parser.add_argument('--target_train', type=str, required=True)
+    parser.add_argument('--target_test', type=str, required=True)
 
     # Model
     parser.add_argument('--num_categories1', type=int, default=40)
@@ -59,7 +60,7 @@ def parse_args():
     parser.add_argument('--use_warmup', default=False, action='store_true')
 
     # Loss
-    parser.add_argument('--reduction', type=str, default='sum')
+    parser.add_argument('--reduction', type=str, default='mean')
     parser.add_argument('--mu1', type=float, default=0.33)
     parser.add_argument('--mu2', type=float, default=0.33)
     parser.add_argument('--mu3', type=float, default=0.33)
@@ -74,8 +75,11 @@ def main():
     args = parse_args()
 
     # Update path to weights and runs
-    args.path_weights = os.path.join('..', 'data', 'exps', 'weights', args.exp)
-    args.path_runs = os.path.join('..', 'data', 'exps', 'runs', args.exp)
+    args.path_weights = os.path.join('..', '..','data', 'exps', 'weights', args.exp)
+    args.path_pseudo = os.path.join('..','..','data', 'exps', 'pseudo', args.source_exp, args.pseudo_domain)
+    
+    checkpoint = torch.load(os.path.join(args.path_pseudo, '{:s}.tar'.format(args_test.checkpoint)))
+    
 
     # Create experiment folder
     os.makedirs(args.path_weights, exist_ok=True)
@@ -83,8 +87,24 @@ def main():
     # Create logger
     logger = get_logger(os.path.join(args.path_weights, 'log_train.txt'))
 
-    # # Create TensorBoard logger
-    # writer = SummaryWriter(log_dir=args.path_runs)
+    # # Create Wandb logger
+    wandb.init(dir='../',
+      project='Multitask_1H', 
+      name=args.exp,
+      config = {"model_type": args.model_type,
+                "source_train": args.source_train,
+                "source_test": args.source_test,
+                "target_train": args.target_train,
+                "target_test": args.target_test,
+                "epochs": args.num_epochs,
+                "batch_size": args.bs,
+                "balance": args.balance_mini_batches,
+                "lr": args.lr_init,
+                "reduction": args.reduction,
+                "mu1": args.mu1,
+                "mu2": args.mu2,
+                "mu3": args.mu3,
+                })
 
     # Log library versions
     logger.info('PyTorch version = {:s}'.format(torch.__version__))
@@ -118,18 +138,18 @@ def run_train(args, logger):
 
     # Get the source datasets
     dataset_train_source = dataset(
-        path_pointer=args.path_split_train_source,
+        domain_type=args.source_train,
         augm_type='train')
     dataset_valid_source = dataset(
-        path_pointer=args.path_split_valid_source,
+        domain_type=args.source_test,
         augm_type='test')
 
     # Get the target datasets
     dataset_train_target = dataset(
-        path_pointer=args.path_split_train_target,
+        domain_type=args.target_train,
         augm_type='train')
     dataset_valid_target = dataset(
-        path_pointer=args.path_split_valid_target,
+        domain_type=args.target_test,
         augm_type='test')
 
     # Log stats
@@ -171,29 +191,13 @@ def run_train(args, logger):
         drop_last=False)
 
     # Get the target dataloaders
-    if args.balance_mini_batches:
-        weight_categories = 1.0 / torch.Tensor(dataset_train_target.instances1)
-        weight_categories = weight_categories.double()
-        weight_samples = np.array([weight_categories[_] for _ in dataset_train_target.labels1])
-        weight_samples = torch.from_numpy(weight_samples)
-        weight_samples = weight_samples.to(args.device)
-        sampler = torch.utils.data.sampler.WeightedRandomSampler(weight_samples, len(dataset_train_target))
-        loader_train_target = torch.utils.data.DataLoader(
-            dataset=dataset_train_target,
-            batch_size=args.bs,
-            num_workers=args.num_workers,
-            sampler=sampler,
-            shuffle=False,  # When using a custom sampler, we should turn off shuffling
-            pin_memory=True,
-            drop_last=True)
-    else:
-        loader_train_target = torch.utils.data.DataLoader(
-            dataset=dataset_train_target,
-            batch_size=args.bs,
-            num_workers=args.num_workers,
-            shuffle=True,
-            pin_memory=True,
-            drop_last=True)
+    loader_train_target = torch.utils.data.DataLoader(
+        dataset=dataset_train_target,
+        batch_size=args.bs,
+        num_workers=args.num_workers,
+        shuffle=True,
+        pin_memory=True,
+        drop_last=True)
     loader_valid_target = torch.utils.data.DataLoader(
         dataset=dataset_valid_target,
         batch_size=args.bs,
@@ -336,8 +340,8 @@ def run_train(args, logger):
         logger.info('VAL, Epoch: {:4d}, Loss: {:e}, OA1: {:.4f}, MCA1: {:.4f}, OA2: {:.4f}, MCA2: {:.4f}, Elapsed: {:.1f}s'.format(
             epoch, stats_valid['loss'], stats_valid['oa1'], stats_valid['mca1'], stats_valid['oa2'], stats_train['mca2'], time.time() - since))
 
-        # # Update TensorBoard logger
-        # update_tb(writer, epoch, optimizer, stats_train, stats_valid)
+        # Update Wandb logger
+        update_wandb(epoch, optimizer, stats_train, stats_valid)
 
         # Scheduler step
         # TODO scheduler_lr.step()
@@ -384,14 +388,14 @@ def do_epoch_train(loader_train_source, loader_train_target, model, criterion1, 
     #     if i == max_iters + 1:
     #         break
 
-    # Loop on target dataloader. Source: https://stackoverflow.com/questions/51444059/how-to-iterate-over-two-dataloaders-simultaneously-using-pytorch
-    dataloader_iterator = iter(loader_train_source)
-    for i, data_target in enumerate(loader_train_target):
+    # Loop on source dataloader. Source: https://stackoverflow.com/questions/51444059/how-to-iterate-over-two-dataloaders-simultaneously-using-pytorch
+    dataloader_iterator = iter(loader_train_target)
+    for i, data_source in enumerate(loader_train_source):
         try:
-            data_source = next(dataloader_iterator)
+            data_target = next(dataloader_iterator)
         except StopIteration:
-            dataloader_iterator = iter(loader_train_source)
-            data_source = next(dataloader_iterator)
+            dataloader_iterator = iter(loader_train_target)
+            data_target = next(dataloader_iterator)
 
         # Load source mini-batch
         images_source, categories1_source, categories2_source = data_source
@@ -589,28 +593,31 @@ def do_epoch_valid(loader_valid_source, loader_valid_target, model, criterion1, 
     return stats
 
 
-# def update_tb(writer, epoch, optimizer, stats_train, stats_valid):
+def update_wandb(epoch, optimizer, stats_train, stats_valid):
 
-#     writer.add_scalar('train/lr backbone', optimizer.param_groups[0]['lr'], epoch)
-#     writer.add_scalar('train/lr head', optimizer.param_groups[1]['lr'], epoch)
-
-#     writer.add_scalar('train/loss', stats_train['loss'].item(), epoch)
-#     writer.add_scalar('train/loss1_source', stats_train['loss1_source'].item(), epoch)
-#     writer.add_scalar('train/loss2_source', stats_train['loss2_source'].item(), epoch)
-#     writer.add_scalar('train/loss2_target', stats_train['loss2_target'].item(), epoch)
-#     writer.add_scalar('train/oa1', stats_train['oa1'].item(), epoch)
-#     writer.add_scalar('train/mca1', stats_train['mca1'].item(), epoch)
-#     writer.add_scalar('train/oa2', stats_train['oa2'].item(), epoch)
-#     writer.add_scalar('train/mca2', stats_train['mca2'].item(), epoch)
-
-#     writer.add_scalar('valid/loss', stats_valid['loss'].item(), epoch)
-#     writer.add_scalar('valid/loss1_source', stats_valid['loss1_source'].item(), epoch)
-#     writer.add_scalar('valid/loss2_source', stats_valid['loss2_source'].item(), epoch)
-#     writer.add_scalar('valid/loss2_target', stats_valid['loss2_target'].item(), epoch)
-#     writer.add_scalar('valid/oa1', stats_valid['oa1'].item(), epoch)
-#     writer.add_scalar('valid/mca1', stats_valid['mca1'].item(), epoch)
-#     writer.add_scalar('valid/oa2', stats_valid['oa2'].item(), epoch)
-#     writer.add_scalar('valid/mca2', stats_valid['mca2'].item(), epoch)
+    wandb.log({
+        "epoch": epoch,
+        "train/lr backbone": optimizer.param_groups[0]['lr'],
+        "train/lr head": optimizer.param_groups[1]['lr'],
+        # Train Stats
+        "train/loss": stats_train['loss'].item(),
+        "train/loss1_source": stats_train['loss1_source'].item(),
+        "train/loss2_source": stats_train['loss2_source'].item(),
+        "train/loss2_target": stats_train['loss2_target'].item(),
+        "train/oa1": stats_train['oa1'].item(),
+        "train/mca1": stats_train['mca1'].item(),
+        "train/oa2": stats_train['oa2'].item(),
+        "train/mca2": stats_train['mca2'].item(),
+        # Valid Stats
+        "valid/loss": stats_valid['loss'].item(),
+        "valid/loss1_source": stats_valid['loss1_source'].item(),
+        "valid/loss2_source": stats_valid['loss2_source'].item(),
+        "valid/loss2_target": stats_valid['loss2_target'].item(),
+        "valid/oa1": stats_valid['oa1'].item(),
+        "valid/mca1": stats_valid['mca1'].item(),
+        "valid/oa2": stats_valid['oa2'].item(),
+        "valid/mca2": stats_valid['mca2'].item(),
+    })
 
 
 if __name__ == '__main__':

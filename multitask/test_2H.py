@@ -48,7 +48,7 @@ def main():
     args_test.path_runs = os.path.join('..', 'data', 'exps', 'runs', args_test.exp)
 
     # Load checkpoint
-    checkpoint = torch.load(os.path.join(args_test.path_weights, '{:s}.tar'.format(args_test.checkpoint)), map_location=torch.device('cpu'))
+    checkpoint = torch.load(os.path.join(args_test.path_weights, '{:s}.tar'.format(args_test.checkpoint)))
     args = checkpoint['args']
 
     # Update training arguments
@@ -178,10 +178,10 @@ def run_test(args, logger, checkpoint):
     mca2_den = 1e-16 + np.sum(running_mca2_den, axis=0)
 
     stats = {
-        'oa1': np.mean(running_oa1),
-        'mca1': np.mean(mca1_num/mca1_den),
-        'oa2': np.mean(running_oa2),
-        'mca2': np.mean(mca2_num/mca2_den),
+        'oa1': np.mean(running_oa1)*100,
+        'mca1': np.mean(mca1_num/mca1_den)*100,
+        'oa2': np.mean(running_oa2)*100,
+        'mca2': np.mean(mca2_num/mca2_den)*100,
         }
 
     logger.info('OA1: {:.4f}, MCA1: {:.4f}, OA2: {:.4f}, MCA2: {:.4f}'.format(

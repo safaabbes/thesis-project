@@ -8,9 +8,10 @@ import sys
 
 import torch
 import torchvision
+from torch.utils.tensorboard import SummaryWriter
 
 from datasets import dataset2 as dataset
-from models import resnet50s_1head
+from models import resnet50a, resnet50b, resnet50c, resnet50d, resnet50e, resnet50s
 sys.path.append('..')
 from utils import get_logger
 
@@ -20,15 +21,15 @@ def parse_args():
 
     # General
     parser.add_argument('--exp', type=str, required=True)
-    parser.add_argument('--device', type=str, default='cuda')
-    parser.add_argument('--num_workers', type=int, default=0)
+    parser.add_argument('--device', type=str, default='cpu')
+    parser.add_argument('--num_workers', type=int, default=2)
     parser.add_argument('--seed', type=int, default=None)
 
     # Test
     parser.add_argument('--bs', type=int, default=16)
 
     # Data
-    parser.add_argument('--test_domain', type=str, required=True)
+    parser.add_argument('--target_train', type=str, required=True)
 
     # Model
     parser.add_argument('--checkpoint', type=str, required=True)
@@ -43,8 +44,7 @@ def main():
     args_test = parse_args()
 
     # Update path to weights and runs
-    args_test.path_weights = os.path.join('..','..', 'data', 'exps', 'weights', args_test.exp)
-    args_test.path_runs = os.path.join('..', 'data', 'exps', 'runs', args_test.exp)
+    args_test.path_weights = os.path.join('..','..','data', 'exps', 'weights', args_test.exp)
 
     # Load checkpoint
     checkpoint = torch.load(os.path.join(args_test.path_weights, '{:s}.tar'.format(args_test.checkpoint)))
@@ -56,13 +56,12 @@ def main():
     args.num_workers = args_test.num_workers
     args.seed = args_test.seed
     args.bs = args_test.bs
-    args.test_domain = args_test.test_domain
+    args.target_train = args_test.target_train
     args.checkpoint = args_test.checkpoint
     args.path_weights = args_test.path_weights
-    args.path_runs = args_test.path_runs
 
     # Create logger
-    path_log = os.path.join(args.path_weights, 'log_test_{:s}.txt'.format(args.test_domain))
+    path_log = os.path.join(args.path_weights, 'log_test_{:s}_{:s}.txt'.format(args.target_train, args.checkpoint))
     logger = get_logger(path_log)
 
     # Activate CUDNN backend
@@ -91,8 +90,8 @@ def run_test(args, logger, checkpoint):
 
     # Get the target dataset
     dataset_test = dataset(
-        domain_type='{:s}_test'.format(args.test_domain),
-        augm_type='test')
+        domain_type=args.target_train,
+        augm_type='train')
     logger.info('Test samples: {:d}'.format(len(dataset_test)))
     
     # Get the test dataloader
@@ -105,8 +104,8 @@ def run_test(args, logger, checkpoint):
         drop_last=False)
 
     # Get model
-    if args.model_type.lower() == 'resnet50s_1head':
-        model = resnet50s_1head(args)
+    if args.model_type.lower() == 'resnet50s':
+        model = resnet50s(args)
     else:
         raise NotImplementedError
 
@@ -123,7 +122,6 @@ def run_test(args, logger, checkpoint):
     # Init stats
     running_oa1, running_mca1_num, running_mca1_den = list(), list(), list()
     running_oa2, running_mca2_num, running_mca2_den = list(), list(), list()
-
     # Loop over test mini-batches
     for data in loader_test:
 
@@ -136,13 +134,13 @@ def run_test(args, logger, checkpoint):
         with torch.inference_mode():
 
             # Forward pass
-            logits1 = model(images)
+            # logger.info('actual labels =  {}'.format(categories1))
+            logits1, logits2 = model(images)
             _, preds1 = torch.max(logits1, dim=1)
-
-            tmp = np.load('mapping.npz')
-            mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
-            logits2 = torch.mm(logits1, mapping) / (1e-6 + torch.sum(mapping, dim=0))
+            # logger.info('classes preds1 = {}'.format(preds1))
             _, preds2 = torch.max(logits2, dim=1)
+            # logger.info('super classes preds2 = {}'.format(preds2))
+            # logger.info('classes superclasses = {}'.format(categories2))
 
         # Update metrics
         oa1 = torch.sum(preds1 == categories1.squeeze()) / len(categories1)
@@ -184,3 +182,4 @@ def run_test(args, logger, checkpoint):
 
 if __name__ == '__main__':
     main()
+

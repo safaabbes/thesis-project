@@ -12,8 +12,10 @@ import torchinfo
 import pytorch_warmup as warmup
 import wandb
 
+
 from datasets import dataset2 as dataset
-from models import resnet50a, resnet50b, resnet50c, resnet50d, resnet50e, resnet50s
+from datasets import PseudoLabelDataset
+from models import resnet50s_1head
 from losses import loss_ce, loss_op
 sys.path.append('..')
 from utils import get_logger
@@ -26,10 +28,15 @@ def parse_args():
     # General
     parser.add_argument('--exp', type=str, required=True)
     parser.add_argument('--device', type=str, default='cuda')
-    parser.add_argument('--num_workers', type=int, default=2)
+    parser.add_argument('--num_workers', type=int, default=0)
     parser.add_argument('--seed', type=int, default=None)
     parser.add_argument('--freq_saving', type=int, default=10)
-
+    
+    # Pseudo
+    parser.add_argument('--source_exp', type=str, required=True)
+    parser.add_argument('--pseudo_domain', type=str, required=True)
+    parser.add_argument('--checkpoint', type=str, required=True)
+    
     # Train
     parser.add_argument('--bs', type=int, default=16)
     parser.add_argument('--num_epochs', type=int, default=40)
@@ -38,7 +45,7 @@ def parse_args():
     # Data
     parser.add_argument('--source_train', type=str, required=True)
     parser.add_argument('--source_test', type=str, required=True)
-    parser.add_argument('--target_train', type=str, required=True)
+    # parser.add_argument('--target_train', type=str, required=True)
     parser.add_argument('--target_test', type=str, required=True)
 
     # Model
@@ -74,9 +81,9 @@ def main():
     args = parse_args()
 
     # Update path to weights and runs
-    args.path_weights = os.path.join('..','..','data', 'exps', 'weights', args.exp)
-    args.path_runs = os.path.join('..','..','data', 'exps', 'runs', args.exp)
-
+    args.path_weights = os.path.join('..', '..','data', 'exps', 'weights', args.exp)
+    args.path_pseudo = os.path.join('..','..','data', 'exps', 'pseudo', args.source_exp)
+    
     # Create experiment folder
     os.makedirs(args.path_weights, exist_ok=True)
 
@@ -85,12 +92,12 @@ def main():
 
     # # Create Wandb logger
     wandb.init(dir='../',
-      project='Multitask_2H', 
+      project='Multitask_Pseudo_1H', 
       name=args.exp,
       config = {"model_type": args.model_type,
                 "source_train": args.source_train,
                 "source_test": args.source_test,
-                "target_train": args.target_train,
+                "pseudo_domain": args.pseudo_domain,
                 "target_test": args.target_test,
                 "epochs": args.num_epochs,
                 "batch_size": args.bs,
@@ -140,16 +147,22 @@ def run_train(args, logger):
         domain_type=args.source_test,
         augm_type='test')
 
-    # Get the target datasets
-    dataset_train_target = dataset(
-        domain_type=args.target_train,
-        augm_type='train')
+    # # Get the target datasets
+    # dataset_train_target = dataset(
+    #     domain_type=args.target_train,
+    #     augm_type='train')
+    pseudo_target_tensors = torch.load(os.path.join(args.path_pseudo,'{}_{}.pt'.format(args.pseudo_domain, args.checkpoint)))
+    pseudo_images = pseudo_target_tensors['images']
+    pseudo_labels1 = pseudo_target_tensors['pseudo_labels1']
+    pseudo_labels2 = pseudo_target_tensors['pseudo_labels2']
+    dataset_train_target = PseudoLabelDataset(pseudo_images, pseudo_labels1, pseudo_labels2) 
+    
     dataset_valid_target = dataset(
         domain_type=args.target_test,
         augm_type='test')
 
     # Log stats
-    logger.info('Source samples, Training: {:d}, Validation: {:d}'.format(
+    logger.info('Source samples, Training (Pseudo-Labels): {:d}, Validation: {:d}'.format(
         len(dataset_train_source), len(dataset_valid_source)))
     logger.info('Target samples, Training: {:d}, Validation: {:d}'.format(
         len(dataset_train_target), len(dataset_valid_target)))
@@ -203,8 +216,8 @@ def run_train(args, logger):
         drop_last=False)
 
     # Get the model
-    if args.model_type.lower() == 'resnet50s':
-        model = resnet50s(args)
+    if args.model_type.lower() == 'resnet50s_1head':
+        model = resnet50s_1head(args)
     else:
         raise NotImplementedError
 
@@ -222,7 +235,7 @@ def run_train(args, logger):
     # Set the model in training mode
     model.train()
 
-    # Get the model summary
+    # # Get the model summary
     # if torch.cuda.device_count() == 1:
     #     logger.info('Model summary:')
     #     stats = torchinfo.summary(model, (args.bs, 3, 128, 128))
@@ -241,7 +254,7 @@ def run_train(args, logger):
     #         if param.requires_grad is True:
     #             logger.info(name)
 
-    head = ['head1.weight', 'head1.bias', 'head2.weight', 'head2.bias']
+    head = ['head.weight', 'head.bias']
     params_head = list(filter(lambda kv: kv[0] in head, model.named_parameters()))
     params_back = list(filter(lambda kv: kv[0] not in head, model.named_parameters()))
     # logger.info('Learnable backbone parameters:')
@@ -334,7 +347,7 @@ def run_train(args, logger):
         since = time.time()
         stats_valid = do_epoch_valid(loader_valid_source, loader_valid_target, model, criterion1, args)
         logger.info('VAL, Epoch: {:4d}, Loss: {:e}, OA1: {:.4f}, MCA1: {:.4f}, OA2: {:.4f}, MCA2: {:.4f}, Elapsed: {:.1f}s'.format(
-            epoch, stats_valid['loss'], stats_valid['oa1'], stats_valid['mca1'], stats_valid['oa2'], stats_valid['mca2'], time.time() - since))
+            epoch, stats_valid['loss'], stats_valid['oa1'], stats_valid['mca1'], stats_valid['oa2'], stats_train['mca2'], time.time() - since))
 
         # Update Wandb logger
         update_wandb(epoch, optimizer, stats_train, stats_valid)
@@ -358,7 +371,6 @@ def run_train(args, logger):
         os.path.join(args.path_weights, 'last.tar'))
 
     end = time.time()
-    wandb.finish()
     logger.info('Elapsed time: {:.2f} minutes'.format((end - start)/60))
 
 
@@ -410,13 +422,21 @@ def do_epoch_train(loader_train_source, loader_train_target, model, criterion1, 
         optimizer.zero_grad()
 
         # Forward pass for source data
-        logits1_source, logits2_source = model(images_source)
+        logits1_source = model(images_source)
         _, preds1_source = torch.max(logits1_source, dim=1)
+
+        tmp = np.load('mapping.npz')
+        mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+        logits2_source = torch.mm(logits1_source, mapping) / (1e-6 + torch.sum(mapping, dim=0))
         _, preds2_source = torch.max(logits2_source, dim=1)
 
         # Forward pass for target data
-        logits1_target, logits2_target = model(images_target)
+        logits1_target = model(images_target)
         _, preds1_target = torch.max(logits1_target, dim=1)
+
+        tmp = np.load('mapping.npz')
+        mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+        logits2_target = torch.mm(logits1_target, mapping) / (1e-6 + torch.sum(mapping, dim=0))
         _, preds2_target = torch.max(logits2_target, dim=1)
 
         # Losses
@@ -513,13 +533,21 @@ def do_epoch_valid(loader_valid_source, loader_valid_target, model, criterion1, 
         with torch.inference_mode():
 
             # Forward pass for source data
-            logits1_source, logits2_source = model(images_source)
+            logits1_source = model(images_source)
             _, preds1_source = torch.max(logits1_source, dim=1)
+
+            tmp = np.load('mapping.npz')
+            mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+            logits2_source = torch.mm(logits1_source, mapping) / (1e-6 + torch.sum(mapping, dim=0))
             _, preds2_source = torch.max(logits2_source, dim=1)
 
             # Forward pass for target data
-            logits1_target, logits2_target = model(images_target)
+            logits1_target = model(images_target)
             _, preds1_target = torch.max(logits1_target, dim=1)
+
+            tmp = np.load('mapping.npz')
+            mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+            logits2_target = torch.mm(logits1_target, mapping) / (1e-6 + torch.sum(mapping, dim=0))
             _, preds2_target = torch.max(logits2_target, dim=1)
 
             # Losses

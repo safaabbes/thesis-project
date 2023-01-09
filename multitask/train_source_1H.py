@@ -12,8 +12,9 @@ import torchinfo
 import pytorch_warmup as warmup
 import wandb
 
+
 from datasets import dataset2 as dataset
-from models import resnet50a, resnet50b, resnet50c, resnet50d, resnet50e, resnet50s
+from models import resnet50s_1head
 from losses import loss_ce, loss_op
 sys.path.append('..')
 from utils import get_logger
@@ -26,7 +27,7 @@ def parse_args():
     # General
     parser.add_argument('--exp', type=str, required=True)
     parser.add_argument('--device', type=str, default='cuda')
-    parser.add_argument('--num_workers', type=int, default=2)
+    parser.add_argument('--num_workers', type=int, default=0)
     parser.add_argument('--seed', type=int, default=None)
     parser.add_argument('--freq_saving', type=int, default=10)
 
@@ -38,8 +39,8 @@ def parse_args():
     # Data
     parser.add_argument('--source_train', type=str, required=True)
     parser.add_argument('--source_test', type=str, required=True)
-    parser.add_argument('--target_train', type=str, required=True)
-    parser.add_argument('--target_test', type=str, required=True)
+    # parser.add_argument('--target_train', type=str, required=True)
+    # parser.add_argument('--target_test', type=str, required=True)
 
     # Model
     parser.add_argument('--num_categories1', type=int, default=40)
@@ -74,7 +75,7 @@ def main():
     args = parse_args()
 
     # Update path to weights and runs
-    args.path_weights = os.path.join('..','..','data', 'exps', 'weights', args.exp)
+    args.path_weights = os.path.join('..', '..','data', 'exps', 'weights', args.exp)
     args.path_runs = os.path.join('..','..','data', 'exps', 'runs', args.exp)
 
     # Create experiment folder
@@ -85,13 +86,13 @@ def main():
 
     # # Create Wandb logger
     wandb.init(dir='../',
-      project='Multitask_2H', 
+      project='Source_Train', 
       name=args.exp,
       config = {"model_type": args.model_type,
                 "source_train": args.source_train,
                 "source_test": args.source_test,
-                "target_train": args.target_train,
-                "target_test": args.target_test,
+                # "target_train": args.target_train,
+                # "target_test": args.target_test,
                 "epochs": args.num_epochs,
                 "batch_size": args.bs,
                 "balance": args.balance_mini_batches,
@@ -141,18 +142,19 @@ def run_train(args, logger):
         augm_type='test')
 
     # Get the target datasets
-    dataset_train_target = dataset(
-        domain_type=args.target_train,
-        augm_type='train')
-    dataset_valid_target = dataset(
-        domain_type=args.target_test,
-        augm_type='test')
+    # dataset_train_target = dataset(
+    #     domain_type=args.target_train,
+    #     augm_type='train')
+    # dataset_valid_target = dataset(
+    #     domain_type=args.target_test,
+    #     augm_type='test')
 
     # Log stats
+    logger.info('Training 1H Model on Source Dataset using its Super-Classes')
     logger.info('Source samples, Training: {:d}, Validation: {:d}'.format(
         len(dataset_train_source), len(dataset_valid_source)))
-    logger.info('Target samples, Training: {:d}, Validation: {:d}'.format(
-        len(dataset_train_target), len(dataset_valid_target)))
+    # logger.info('Target samples, Training: {:d}, Validation: {:d}'.format(
+    #     len(dataset_train_target), len(dataset_valid_target)))
 
     # Get the source dataloaders
     if args.balance_mini_batches:
@@ -187,24 +189,24 @@ def run_train(args, logger):
         drop_last=False)
 
     # Get the target dataloaders
-    loader_train_target = torch.utils.data.DataLoader(
-        dataset=dataset_train_target,
-        batch_size=args.bs,
-        num_workers=args.num_workers,
-        shuffle=True,
-        pin_memory=True,
-        drop_last=True)
-    loader_valid_target = torch.utils.data.DataLoader(
-        dataset=dataset_valid_target,
-        batch_size=args.bs,
-        num_workers=args.num_workers,
-        shuffle=False,
-        pin_memory=True,
-        drop_last=False)
+    # loader_train_target = torch.utils.data.DataLoader(
+    #     dataset=dataset_train_target,
+    #     batch_size=args.bs,
+    #     num_workers=args.num_workers,
+    #     shuffle=True,
+    #     pin_memory=True,
+    #     drop_last=True)
+    # loader_valid_target = torch.utils.data.DataLoader(
+    #     dataset=dataset_valid_target,
+    #     batch_size=args.bs,
+    #     num_workers=args.num_workers,
+    #     shuffle=False,
+    #     pin_memory=True,
+    #     drop_last=False)
 
     # Get the model
-    if args.model_type.lower() == 'resnet50s':
-        model = resnet50s(args)
+    if args.model_type.lower() == 'resnet50s_1head':
+        model = resnet50s_1head(args)
     else:
         raise NotImplementedError
 
@@ -222,7 +224,7 @@ def run_train(args, logger):
     # Set the model in training mode
     model.train()
 
-    # Get the model summary
+    # # Get the model summary
     # if torch.cuda.device_count() == 1:
     #     logger.info('Model summary:')
     #     stats = torchinfo.summary(model, (args.bs, 3, 128, 128))
@@ -241,7 +243,7 @@ def run_train(args, logger):
     #         if param.requires_grad is True:
     #             logger.info(name)
 
-    head = ['head1.weight', 'head1.bias', 'head2.weight', 'head2.bias']
+    head = ['head.weight', 'head.bias']
     params_head = list(filter(lambda kv: kv[0] in head, model.named_parameters()))
     params_back = list(filter(lambda kv: kv[0] not in head, model.named_parameters()))
     # logger.info('Learnable backbone parameters:')
@@ -326,15 +328,15 @@ def run_train(args, logger):
 
         # Training
         since = time.time()
-        stats_train = do_epoch_train(loader_train_source, loader_train_target, model, criterion1, optimizer, scheduler_lr, scheduler_warmup, args)
+        stats_train = do_epoch_train(loader_train_source, model, criterion1, optimizer, scheduler_lr, scheduler_warmup, args)
         logger.info('TRN, Epoch: {:4d}, Loss: {:e}, OA1: {:.4f}, MCA1: {:.4f}, OA2: {:.4f}, MCA2: {:.4f}, Elapsed: {:.1f}s'.format(
             epoch, stats_train['loss'], stats_train['oa1'], stats_train['mca1'], stats_train['oa2'], stats_train['mca2'], time.time() - since))
 
         # Validation
         since = time.time()
-        stats_valid = do_epoch_valid(loader_valid_source, loader_valid_target, model, criterion1, args)
+        stats_valid = do_epoch_valid(loader_valid_source, model, criterion1, args)
         logger.info('VAL, Epoch: {:4d}, Loss: {:e}, OA1: {:.4f}, MCA1: {:.4f}, OA2: {:.4f}, MCA2: {:.4f}, Elapsed: {:.1f}s'.format(
-            epoch, stats_valid['loss'], stats_valid['oa1'], stats_valid['mca1'], stats_valid['oa2'], stats_valid['mca2'], time.time() - since))
+            epoch, stats_valid['loss'], stats_valid['oa1'], stats_valid['mca1'], stats_valid['oa2'], stats_train['mca2'], time.time() - since))
 
         # Update Wandb logger
         update_wandb(epoch, optimizer, stats_train, stats_valid)
@@ -358,11 +360,10 @@ def run_train(args, logger):
         os.path.join(args.path_weights, 'last.tar'))
 
     end = time.time()
-    wandb.finish()
     logger.info('Elapsed time: {:.2f} minutes'.format((end - start)/60))
 
 
-def do_epoch_train(loader_train_source, loader_train_target, model, criterion1, optimizer, scheduler_lr, scheduler_warmup, args):
+def do_epoch_train(loader_train_source, model, criterion1, optimizer, scheduler_lr, scheduler_warmup, args):
 
     # Set the model in training mode
     model = model.train()
@@ -386,13 +387,13 @@ def do_epoch_train(loader_train_source, loader_train_target, model, criterion1, 
     #         break
 
     # Loop on source dataloader. Source: https://stackoverflow.com/questions/51444059/how-to-iterate-over-two-dataloaders-simultaneously-using-pytorch
-    dataloader_iterator = iter(loader_train_target)
+    # dataloader_iterator = iter(loader_train_target)
     for i, data_source in enumerate(loader_train_source):
-        try:
-            data_target = next(dataloader_iterator)
-        except StopIteration:
-            dataloader_iterator = iter(loader_train_target)
-            data_target = next(dataloader_iterator)
+        # try:
+        #     data_target = next(dataloader_iterator)
+        # except StopIteration:
+        #     dataloader_iterator = iter(loader_train_target)
+        #     data_target = next(dataloader_iterator)
 
         # Load source mini-batch
         images_source, categories1_source, categories2_source = data_source
@@ -401,29 +402,37 @@ def do_epoch_train(loader_train_source, loader_train_target, model, criterion1, 
         categories2_source = categories2_source.to(args.device, non_blocking=True)
 
         # Load target mini-batch
-        images_target, categories1_target, categories2_target = data_target
-        images_target = images_target.to(args.device, non_blocking=True)
-        categories1_target = categories1_target.to(args.device, non_blocking=True)
-        categories2_target = categories2_target.to(args.device, non_blocking=True)
+        # images_target, categories1_target, categories2_target = data_target
+        # images_target = images_target.to(args.device, non_blocking=True)
+        # categories1_target = categories1_target.to(args.device, non_blocking=True)
+        # categories2_target = categories2_target.to(args.device, non_blocking=True)
 
         # Zero the parameters gradients
         optimizer.zero_grad()
 
         # Forward pass for source data
-        logits1_source, logits2_source = model(images_source)
+        logits1_source = model(images_source)
         _, preds1_source = torch.max(logits1_source, dim=1)
+
+        tmp = np.load('mapping.npz')
+        mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+        logits2_source = torch.mm(logits1_source, mapping) / (1e-6 + torch.sum(mapping, dim=0))
         _, preds2_source = torch.max(logits2_source, dim=1)
 
         # Forward pass for target data
-        logits1_target, logits2_target = model(images_target)
-        _, preds1_target = torch.max(logits1_target, dim=1)
-        _, preds2_target = torch.max(logits2_target, dim=1)
+        # logits1_target = model(images_target)
+        # _, preds1_target = torch.max(logits1_target, dim=1)
+
+        # tmp = np.load('mapping.npz')
+        # mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+        # logits2_target = torch.mm(logits1_target, mapping) / (1e-6 + torch.sum(mapping, dim=0))
+        # _, preds2_target = torch.max(logits2_target, dim=1)
 
         # Losses
         loss1_source = args.mu1 * criterion1(logits1_source, categories1_source)
         loss2_source = args.mu2 * criterion1(logits2_source, categories2_source)
-        loss2_target = args.mu3 * criterion1(logits2_target, categories2_target)
-        loss = loss1_source + loss2_source + loss2_target
+        # loss2_target = args.mu3 * criterion1(logits2_target, categories2_target)
+        loss = loss1_source + loss2_source #+ loss2_target
 
         # Back-propagation
         loss.backward()
@@ -442,7 +451,7 @@ def do_epoch_train(loader_train_source, loader_train_target, model, criterion1, 
         running_loss.append(loss.item())
         running_loss1_source.append(loss1_source.item())
         running_loss2_source.append(loss2_source.item())
-        running_loss2_target.append(loss2_target.item())
+        # running_loss2_target.append(loss2_target.item())
 
         # Update metrics
         oa1 = torch.sum(preds1_source == categories1_source.squeeze()) / len(categories1_source)
@@ -475,7 +484,7 @@ def do_epoch_train(loader_train_source, loader_train_target, model, criterion1, 
         'loss': np.mean(running_loss),
         'loss1_source': np.mean(running_loss1_source),
         'loss2_source': np.mean(running_loss2_source),
-        'loss2_target': np.mean(running_loss2_target),
+        # 'loss2_target': np.mean(running_loss2_target),
         'oa1': np.mean(running_oa1),
         'mca1': np.mean(mca1_num/mca1_den),
         'oa2': np.mean(running_oa2),
@@ -485,7 +494,7 @@ def do_epoch_train(loader_train_source, loader_train_target, model, criterion1, 
     return stats
 
 
-def do_epoch_valid(loader_valid_source, loader_valid_target, model, criterion1, args):
+def do_epoch_valid(loader_valid_source, model, criterion1, args):
 
     # Set the model in evaluation mode
     model = model.eval()
@@ -496,7 +505,8 @@ def do_epoch_valid(loader_valid_source, loader_valid_target, model, criterion1, 
     running_oa2, running_mca2_num, running_mca2_den = list(), list(), list()
 
     # Loop over validation mini-batches
-    for data_source, data_target in zip(loader_valid_source, loader_valid_target):
+    for data_source in loader_valid_source:
+    # for data_source, data_target in zip(loader_valid_source, loader_valid_target):
 
         # Load source mini-batch
         images_source, categories1_source, categories2_source = data_source
@@ -505,34 +515,42 @@ def do_epoch_valid(loader_valid_source, loader_valid_target, model, criterion1, 
         categories2_source = categories2_source.to(args.device, non_blocking=True)
 
         # Load target mini-batch
-        images_target, categories1_target, categories2_target = data_target
-        images_target = images_target.to(args.device, non_blocking=True)
-        categories1_target = categories1_target.to(args.device, non_blocking=True)
-        categories2_target = categories2_target.to(args.device, non_blocking=True)
+        # images_target, categories1_target, categories2_target = data_target
+        # images_target = images_target.to(args.device, non_blocking=True)
+        # categories1_target = categories1_target.to(args.device, non_blocking=True)
+        # categories2_target = categories2_target.to(args.device, non_blocking=True)
 
         with torch.inference_mode():
 
             # Forward pass for source data
-            logits1_source, logits2_source = model(images_source)
+            logits1_source = model(images_source)
             _, preds1_source = torch.max(logits1_source, dim=1)
+
+            tmp = np.load('mapping.npz')
+            mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+            logits2_source = torch.mm(logits1_source, mapping) / (1e-6 + torch.sum(mapping, dim=0))
             _, preds2_source = torch.max(logits2_source, dim=1)
 
             # Forward pass for target data
-            logits1_target, logits2_target = model(images_target)
-            _, preds1_target = torch.max(logits1_target, dim=1)
-            _, preds2_target = torch.max(logits2_target, dim=1)
+            # logits1_target = model(images_target)
+            # _, preds1_target = torch.max(logits1_target, dim=1)
+
+            # tmp = np.load('mapping.npz')
+            # mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+            # logits2_target = torch.mm(logits1_target, mapping) / (1e-6 + torch.sum(mapping, dim=0))
+            # _, preds2_target = torch.max(logits2_target, dim=1)
 
             # Losses
             loss1_source = args.mu1 * criterion1(logits1_source, categories1_source)
             loss2_source = args.mu2 * criterion1(logits2_source, categories2_source)
-            loss2_target = args.mu3 * criterion1(logits2_target, categories2_target)
-            loss = loss1_source + loss2_source + loss2_target
+            # loss2_target = args.mu3 * criterion1(logits2_target, categories2_target)
+            loss = loss1_source + loss2_source #+ loss2_target
 
         # Update losses
         running_loss.append(loss.item())
         running_loss1_source.append(loss1_source.item())
         running_loss2_source.append(loss2_source.item())
-        running_loss2_target.append(loss2_target.item())
+        # running_loss2_target.append(loss2_target.item())
 
         # Update metrics
         oa1 = torch.sum(preds1_source == categories1_source.squeeze()) / len(categories1_source)
@@ -564,7 +582,7 @@ def do_epoch_valid(loader_valid_source, loader_valid_target, model, criterion1, 
         'loss': np.mean(running_loss),
         'loss1_source': np.mean(running_loss1_source),
         'loss2_source': np.mean(running_loss2_source),
-        'loss2_target': np.mean(running_loss2_target),
+        # 'loss2_target': np.mean(running_loss2_target),
         'oa1': np.mean(running_oa1),
         'mca1': np.mean(mca1_num/mca1_den),
         'oa2': np.mean(running_oa2),
@@ -584,7 +602,7 @@ def update_wandb(epoch, optimizer, stats_train, stats_valid):
         "train/loss": stats_train['loss'].item(),
         "train/loss1_source": stats_train['loss1_source'].item(),
         "train/loss2_source": stats_train['loss2_source'].item(),
-        "train/loss2_target": stats_train['loss2_target'].item(),
+        # "train/loss2_target": stats_train['loss2_target'].item(),
         "train/oa1": stats_train['oa1'].item(),
         "train/mca1": stats_train['mca1'].item(),
         "train/oa2": stats_train['oa2'].item(),
@@ -593,7 +611,7 @@ def update_wandb(epoch, optimizer, stats_train, stats_valid):
         "valid/loss": stats_valid['loss'].item(),
         "valid/loss1_source": stats_valid['loss1_source'].item(),
         "valid/loss2_source": stats_valid['loss2_source'].item(),
-        "valid/loss2_target": stats_valid['loss2_target'].item(),
+        # "valid/loss2_target": stats_valid['loss2_target'].item(),
         "valid/oa1": stats_valid['oa1'].item(),
         "valid/mca1": stats_valid['mca1'].item(),
         "valid/oa2": stats_valid['oa2'].item(),

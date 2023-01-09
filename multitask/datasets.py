@@ -59,7 +59,7 @@ class dataset1(torch.utils.data.Dataset):
     def __getitem__(self, index):
 
         # Load image
-        with open(os.path.join('..', 'data', self.pointer[index, 0]), 'rb') as _:
+        with open(os.path.join('..','..', 'data', self.pointer[index, 0]), 'rb') as _:
             image = Image.open(_)
             image = image.convert('RGB')  # PIL object
 
@@ -81,10 +81,11 @@ class dataset1(torch.utils.data.Dataset):
 
 class dataset2(torch.utils.data.Dataset):
 
-    def __init__(self, path_pointer, augm_type):
+    def __init__(self, domain_type, augm_type):
 
         # Get pointers
         pointer = list()
+        path_pointer = '../../data/splits_multitask/{:s}_mini.txt'.format(domain_type)
         with open(path_pointer) as f:
             for l in f.readlines():
                 pointer.append(l.split())
@@ -124,7 +125,7 @@ class dataset2(torch.utils.data.Dataset):
     def __getitem__(self, index):
 
         # Load image
-        with open(os.path.join('..', 'data', self.pointer[index, 0]), 'rb') as _:
+        with open(os.path.join('..','..','data', self.pointer[index, 0]), 'rb') as _:
             image = Image.open(_)
             image = image.convert('RGB')  # PIL object
 
@@ -139,3 +140,20 @@ class dataset2(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.pointer)
+    
+    
+
+class PseudoLabelDataset(torch.utils.data.Dataset):
+    def __init__(self, images, labels1, labels2):
+        self.images = images
+        self.labels1 = labels1
+        self.labels2 = labels2
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, index):
+        image = self.images[index]
+        label1 = self.labels1[index]
+        label2 = self.labels2[index]
+        return image, label1, label2
