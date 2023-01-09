@@ -1,9 +1,25 @@
 # thesis-project
 
+Variables:
+Level train_source: \
+        - use 1 or 2 head method
+        - for each we have 4 model checkpoints 
+Level test_pseudo: \
+        - use 1 or 2 head method (independant from how many heads where used when making the train source)
+        - 6 possible methods to create pseudo labels :
+                - Use Softmax + Threshold 0.8 on either preds of classes or preds of super-classes
+                - Use Softmax + Threshold 0.9 on either preds of classes or preds of super-classes
+                - Use condition where if class prediction in cluster prediction, select based on the preds of classes or preds of super-classes
+Level train_pseudo: \
+        - use 1 or 2 head method (independant from how many heads where used when making the train source)
+        
+
 ### TODO List
 
 (20/12/2022)
-- [ ] Implement Pseudo Labels
+- [x] Analyze Pseudo labels strategy: softmax + threshold/ get pseudo labels when class prediction belong to cluster prediction
+- [x] Train on Source labels only and save 10 > 20 checkpoints
+- [x] Implement Pseudo Labels: Train on Source (train_source_1H.py then test_pseudo_1H.py to create pseudo labels using the model of source then train_pseudo.py train model using as target dataset the tensors created)
 - [x] Analyse difference between reduction sum and mean (sum = mean*bs, reduction sum fails with lr=0.01, instead mean+lr=0.01 acheive similar performance as reduction sum + lr 0.001)
 - [x] Resolve difference between code versions 
 - [ ] Try clustering word embeddings of class names to create superclasses 
