@@ -2,16 +2,16 @@
 
 Variables: \
 Level train_source: \
-        - use 1 or 2 head method
-        - for each we have 4 model checkpoints 
+        - use 1 or 2 head method \
+        - for each we have 4 model checkpoints \
 Level test_pseudo: \
-        - use 1 or 2 head method (independant from how many heads where used when making the train source)
-        - 6 possible methods to create pseudo labels :
-                - Use Softmax + Threshold 0.8 on either preds of classes or preds of super-classes
-                - Use Softmax + Threshold 0.9 on either preds of classes or preds of super-classes
-                - Use condition where if class prediction in cluster prediction, select based on the preds of classes or preds of super-classes
+        - use 1 or 2 head method (independant from how many heads where used when making the train source) \
+        - 6 possible methods to create pseudo labels: \
+                - Use Softmax + Threshold 0.8 on either preds of classes or preds of super-classes \
+                - Use Softmax + Threshold 0.9 on either preds of classes or preds of super-classes \
+                - Use condition where if class prediction in cluster prediction, select based on the preds of classes or preds of super-classes \
 Level train_pseudo: \
-        - use 1 or 2 head method (independant from how many heads where used when making the train source)
+        - use 1 or 2 head method (independant from how many heads where used when making the train source) \
         
 
 ### TODO List
