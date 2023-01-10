@@ -1,6 +1,6 @@
 # thesis-project
 
-Variables:
+Variables: \
 Level train_source: \
         - use 1 or 2 head method
         - for each we have 4 model checkpoints 
