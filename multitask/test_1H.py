@@ -62,7 +62,7 @@ def main():
     args.path_runs = args_test.path_runs
 
     # Create logger
-    path_log = os.path.join(args.path_weights, 'log_test_{:s}.txt'.format(args.test_domain))
+    path_log = os.path.join(args.path_weights, 'log_test_{:s}_{:s}.txt'.format(args.test_domain, args.checkpoint))
     logger = get_logger(path_log)
 
     # Activate CUDNN backend

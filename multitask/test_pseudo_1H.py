@@ -47,6 +47,10 @@ def main():
     # Update path to weights and runs
     args_test.path_weights = os.path.join('..','..', 'data', 'exps', 'weights', args_test.exp)
     args_test.path_pseudo = os.path.join('..','..','data', 'exps', 'pseudo', args_test.exp)
+    
+    # Create pseudo exp folder
+    os.makedirs(args_test.path_pseudo, exist_ok=True)
+    
     # Load checkpoint
     checkpoint = torch.load(os.path.join(args_test.path_weights, '{:s}.tar'.format(args_test.checkpoint)))
     args = checkpoint['args']
@@ -61,6 +65,7 @@ def main():
     args.checkpoint = args_test.checkpoint
     args.path_weights = args_test.path_weights
     args.path_pseudo = args_test.path_pseudo
+    args.condition = args_test.condition
 
 
     # Create logger
@@ -170,9 +175,9 @@ def run_test(args, logger, checkpoint):
             prob2, preds2 = torch.max(logits2, dim=1)
             
             # Creating Super Classes based on the prediction of the super-classes if they surpass th=0.9
-            for j, p in enumerate(prob2):
-                if args.condition == '0.9' or args.condition == '0.8':
-                    threshold = float(args.condition)
+            if args.condition == '0.9' or args.condition == '0.8':
+                threshold = float(args.condition)
+                for j, p in enumerate(prob2):
                     if p.item() > threshold:
                         pseudo_images[num_images] = images[j]
                         pseudo_labels1[num_labels1] = preds1[j]
@@ -180,29 +185,32 @@ def run_test(args, logger, checkpoint):
                         num_images += 1
                         num_labels1 += 1
                         num_labels2 += 1
-                    else:
-                        raise NotImplementedError
-
-            # Creating Pseudo Labels based on the probability confidence using a threshold of 0.8
-            # threshold = 0.9
-            mask = prob1 > threshold
-            pseudo_labels_1[i*args.bs : (i+1)*args.bs][mask] = preds1[mask]
-            pseudo_labels_1[i*args.bs : (i+1)*args.bs][~mask] = -1  
-
-            mask = prob2 > threshold
-            pseudo_labels_2[i*args.bs : (i+1)*args.bs][mask] = preds2[mask]
-            pseudo_labels_2[i*args.bs : (i+1)*args.bs][~mask] = -1  
-            
-            # # Creating Pseudo Labels if the class prediction belongs to the cluster prediction
-            # one_hot_preds1 = torch.nn.functional.one_hot(preds1, num_classes=args.num_categories1).to(torch.float)
-            # one_hot_preds2 = torch.nn.functional.one_hot(preds2, num_classes=args.num_categories2).to(torch.float)
-            # preds1_true_sc = torch.mm(one_hot_preds1, mapping)
-            # mask = (preds1_true_sc == one_hot_preds2).all(dim=1)
-            # pseudo_labels_1[i*args.bs : (i+1)*args.bs][mask] = preds1[mask]
-            # pseudo_labels_1[i*args.bs : (i+1)*args.bs][~mask] = -1
-            
-            # pseudo_labels_2[i*args.bs : (i+1)*args.bs][mask] = preds2[mask]
-            # pseudo_labels_2[i*args.bs : (i+1)*args.bs][~mask] = -1
+                # Creating Pseudo Labels based on the probability confidence using a threshold 
+                mask = prob1 > threshold
+                pseudo_labels_1[i*args.bs : (i+1)*args.bs][mask] = preds1[mask]
+                pseudo_labels_1[i*args.bs : (i+1)*args.bs][~mask] = -1  
+                mask = prob2 > threshold
+                pseudo_labels_2[i*args.bs : (i+1)*args.bs][mask] = preds2[mask]
+                pseudo_labels_2[i*args.bs : (i+1)*args.bs][~mask] = -1  
+            # Creating Super Classes based on the coherence between class and super-class           
+            elif args.condition == 'coherence':
+                one_hot_preds1 = torch.nn.functional.one_hot(preds1, num_classes=args.num_categories1).to(torch.float)
+                one_hot_preds2 = torch.nn.functional.one_hot(preds2, num_classes=args.num_categories2).to(torch.float)
+                preds1_true_sc = torch.mm(one_hot_preds1, mapping)
+                mask = (preds1_true_sc == one_hot_preds2).all(dim=1)
+                for j, p in enumerate(mask):
+                    if p.item():
+                        pseudo_images[num_images] = images[j]
+                        pseudo_labels1[num_labels1] = preds1[j]
+                        pseudo_labels2[num_labels2] = preds2[j]
+                        num_images += 1
+                        num_labels1 += 1
+                        num_labels2 += 1
+                # Creating Pseudo Labels if the class prediction belongs to the cluster prediction
+                pseudo_labels_1[i*args.bs : (i+1)*args.bs][mask] = preds1[mask]
+                pseudo_labels_1[i*args.bs : (i+1)*args.bs][~mask] = -1
+                pseudo_labels_2[i*args.bs : (i+1)*args.bs][mask] = preds2[mask]
+                pseudo_labels_2[i*args.bs : (i+1)*args.bs][~mask] = -1
             
         # Update metrics
         oa1 = torch.sum(preds1 == categories1.squeeze()) / len(categories1)
@@ -225,7 +233,7 @@ def run_test(args, logger, checkpoint):
         running_mca2_num.append(mca2_num.detach().cpu().numpy())
         running_mca2_den.append(mca2_den.detach().cpu().numpy())
     
-    logger.info('Pseudo Labels Strategy: Threshold 0.9')    
+    logger.info('Pseudo Labels Strategy: {}'.format(args.condition))    
      
     logger.info('Pseudo Labels Analysis for Original Classes')
     pseudo_labels_1 = pseudo_labels_1.cpu().numpy()
@@ -266,18 +274,14 @@ def run_test(args, logger, checkpoint):
                 'source_exp': args.exp,
                 'checkpoint': args.checkpoint,
                 'condition': args.condition,
-                }, os.path.join(args.path_pseudo, '{}_{}.pt'.format(args.target_train, args.checkpoint)))
+                }, os.path.join(args.path_pseudo, '{}_{}_{}.tar'.format(args.target_train, args.checkpoint, args.condition)))
     
     logger.info('\t images len =  {}'.format(len(pseudo_images)))
     logger.info('\t labels1 len =  {}'.format(len(pseudo_labels1)))
     logger.info('\t labels2 len =  {}'.format(len(pseudo_labels2)))
-    logger.info('labels1 =  {}'.format(pseudo_labels1))
-    logger.info('labels2 =  {}'.format(pseudo_labels2))
-    
-    # pseudo_dataset = PseudoLabelDataset(pseudo_images, pseudo_labels1, pseudo_labels2) 
-    # logger.info('Pseudo Dataset Len =  {}'.format(len(pseudo_dataset)))
-    
-            
+    logger.info('labels1 =  {}'.format(pseudo_labels1[0:40]))
+    logger.info('labels2 =  {}'.format(pseudo_labels2[0:40]))
+       
     # Update MCA metric
     mca1_num = np.sum(running_mca1_num, axis=0)
     mca1_den = 1e-16 + np.sum(running_mca1_den, axis=0)

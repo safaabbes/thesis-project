@@ -36,6 +36,7 @@ def parse_args():
     parser.add_argument('--source_exp', type=str, required=True)
     parser.add_argument('--pseudo_domain', type=str, required=True)
     parser.add_argument('--checkpoint', type=str, required=True)
+    parser.add_argument('--condition', type=str, required=True)
     
     # Train
     parser.add_argument('--bs', type=int, default=16)
@@ -151,7 +152,8 @@ def run_train(args, logger):
     # dataset_train_target = dataset(
     #     domain_type=args.target_train,
     #     augm_type='train')
-    pseudo_target_tensors = torch.load(os.path.join(args.path_pseudo,'{}_{}.pt'.format(args.pseudo_domain, args.checkpoint)))
+    # pseudo_target_tensors = torch.load(os.path.join(args.path_pseudo,'{}_{}.pt'.format(args.pseudo_domain, args.checkpoint)))
+    pseudo_target_tensors = torch.load(os.path.join(args.path_pseudo,'{}_{}_{}.tar'.format(args.pseudo_domain, args.checkpoint, args.condition)))
     pseudo_images = pseudo_target_tensors['images']
     pseudo_labels1 = pseudo_target_tensors['pseudo_labels1']
     pseudo_labels2 = pseudo_target_tensors['pseudo_labels2']
@@ -162,9 +164,9 @@ def run_train(args, logger):
         augm_type='test')
 
     # Log stats
-    logger.info('Source samples, Training (Pseudo-Labels): {:d}, Validation: {:d}'.format(
+    logger.info('Source samples, Training: {:d}, Validation: {:d}'.format(
         len(dataset_train_source), len(dataset_valid_source)))
-    logger.info('Target samples, Training: {:d}, Validation: {:d}'.format(
+    logger.info('Target samples, Training (Pseudo-Labels): {:d}, Validation: {:d}'.format(
         len(dataset_train_target), len(dataset_valid_target)))
 
     # Get the source dataloaders
@@ -222,6 +224,8 @@ def run_train(args, logger):
         raise NotImplementedError
 
     # Send the model to the device
+    # checkpoint = torch.load(os.path.join('..','..','data', 'exps', 'weights', args.source_exp, '{}.tar'.format(args.checkpoint)))
+    # model.load_state_dict(checkpoint['model_state_dict']) (load model from scratch seems to work better)
     model = model.to(args.device)
     # logger.info('Model is on device: {}'.format(next(model.parameters()).device))
 
