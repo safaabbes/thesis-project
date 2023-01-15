@@ -39,8 +39,6 @@ def parse_args():
     # Data
     parser.add_argument('--source_train', type=str, required=True)
     parser.add_argument('--source_test', type=str, required=True)
-    # parser.add_argument('--target_train', type=str, required=True)
-    # parser.add_argument('--target_test', type=str, required=True)
 
     # Model
     parser.add_argument('--num_categories1', type=int, default=40)
@@ -61,9 +59,8 @@ def parse_args():
 
     # Loss
     parser.add_argument('--reduction', type=str, default='mean')
-    parser.add_argument('--mu1', type=float, default=0.33)
-    parser.add_argument('--mu2', type=float, default=0.33)
-    parser.add_argument('--mu3', type=float, default=0.33)
+    parser.add_argument('--mu1', type=float, default=0.5)
+    parser.add_argument('--mu2', type=float, default=0.5)
 
     args = parser.parse_args()
     return args
@@ -75,8 +72,7 @@ def main():
     args = parse_args()
 
     # Update path to weights and runs
-    args.path_weights = os.path.join('..', '..','data', 'exps', 'weights', args.exp)
-    args.path_runs = os.path.join('..','..','data', 'exps', 'runs', args.exp)
+    args.path_weights = os.path.join('..', '..','data', 'exps', 'models', args.exp)
 
     # Create experiment folder
     os.makedirs(args.path_weights, exist_ok=True)
@@ -86,13 +82,11 @@ def main():
 
     # # Create Wandb logger
     wandb.init(dir='../',
-      project='Source_Train', 
+      project='Source_Only_SC', 
       name=args.exp,
       config = {"model_type": args.model_type,
                 "source_train": args.source_train,
                 "source_test": args.source_test,
-                # "target_train": args.target_train,
-                # "target_test": args.target_test,
                 "epochs": args.num_epochs,
                 "batch_size": args.bs,
                 "balance": args.balance_mini_batches,
@@ -100,7 +94,6 @@ def main():
                 "reduction": args.reduction,
                 "mu1": args.mu1,
                 "mu2": args.mu2,
-                "mu3": args.mu3,
                 })
 
     # Log library versions
@@ -141,20 +134,10 @@ def run_train(args, logger):
         domain_type=args.source_test,
         augm_type='test')
 
-    # Get the target datasets
-    # dataset_train_target = dataset(
-    #     domain_type=args.target_train,
-    #     augm_type='train')
-    # dataset_valid_target = dataset(
-    #     domain_type=args.target_test,
-    #     augm_type='test')
-
     # Log stats
     logger.info('Training 1H Model on Source Dataset using its Super-Classes')
     logger.info('Source samples, Training: {:d}, Validation: {:d}'.format(
         len(dataset_train_source), len(dataset_valid_source)))
-    # logger.info('Target samples, Training: {:d}, Validation: {:d}'.format(
-    #     len(dataset_train_target), len(dataset_valid_target)))
 
     # Get the source dataloaders
     if args.balance_mini_batches:
@@ -187,22 +170,6 @@ def run_train(args, logger):
         shuffle=False,
         pin_memory=True,
         drop_last=False)
-
-    # Get the target dataloaders
-    # loader_train_target = torch.utils.data.DataLoader(
-    #     dataset=dataset_train_target,
-    #     batch_size=args.bs,
-    #     num_workers=args.num_workers,
-    #     shuffle=True,
-    #     pin_memory=True,
-    #     drop_last=True)
-    # loader_valid_target = torch.utils.data.DataLoader(
-    #     dataset=dataset_valid_target,
-    #     batch_size=args.bs,
-    #     num_workers=args.num_workers,
-    #     shuffle=False,
-    #     pin_memory=True,
-    #     drop_last=False)
 
     # Get the model
     if args.model_type.lower() == 'resnet50s_1head':
@@ -336,7 +303,7 @@ def run_train(args, logger):
         since = time.time()
         stats_valid = do_epoch_valid(loader_valid_source, model, criterion1, args)
         logger.info('VAL, Epoch: {:4d}, Loss: {:e}, OA1: {:.4f}, MCA1: {:.4f}, OA2: {:.4f}, MCA2: {:.4f}, Elapsed: {:.1f}s'.format(
-            epoch, stats_valid['loss'], stats_valid['oa1'], stats_valid['mca1'], stats_valid['oa2'], stats_train['mca2'], time.time() - since))
+            epoch, stats_valid['loss'], stats_valid['oa1'], stats_valid['mca1'], stats_valid['oa2'], stats_valid['mca2'], time.time() - since))
 
         # Update Wandb logger
         update_wandb(epoch, optimizer, stats_train, stats_valid)
@@ -369,43 +336,18 @@ def do_epoch_train(loader_train_source, model, criterion1, optimizer, scheduler_
     model = model.train()
 
     # Init stats
-    running_loss, running_loss1_source, running_loss2_source, running_loss2_target = list(), list(), list(), list()
+    running_loss, running_loss1_source, running_loss2_source = list(), list(), list()
     running_oa1, running_mca1_num, running_mca1_den = list(), list(), list()
     running_oa2, running_mca2_num, running_mca2_den = list(), list(), list()
 
-    # Loop over training mini-batches
-
-    # Loop on the shorter dataloader
-    # for i, (data_source, data_target) in enumerate(zip(loader_train_source, loader_train_target)):
-
-    # Loop on the longer dataloader. Out-of-memory when using the real split
-    # i = 0
-    # max_iters = max(len(loader_train_source), len(loader_train_target))
-    # for data_source, data_target in zip(cycle(loader_train_source), cycle(loader_train_target)):
-    #     i += 1
-    #     if i == max_iters + 1:
-    #         break
-
     # Loop on source dataloader. Source: https://stackoverflow.com/questions/51444059/how-to-iterate-over-two-dataloaders-simultaneously-using-pytorch
-    # dataloader_iterator = iter(loader_train_target)
     for i, data_source in enumerate(loader_train_source):
-        # try:
-        #     data_target = next(dataloader_iterator)
-        # except StopIteration:
-        #     dataloader_iterator = iter(loader_train_target)
-        #     data_target = next(dataloader_iterator)
 
         # Load source mini-batch
         images_source, categories1_source, categories2_source = data_source
         images_source = images_source.to(args.device, non_blocking=True)
         categories1_source = categories1_source.to(args.device, non_blocking=True)
         categories2_source = categories2_source.to(args.device, non_blocking=True)
-
-        # Load target mini-batch
-        # images_target, categories1_target, categories2_target = data_target
-        # images_target = images_target.to(args.device, non_blocking=True)
-        # categories1_target = categories1_target.to(args.device, non_blocking=True)
-        # categories2_target = categories2_target.to(args.device, non_blocking=True)
 
         # Zero the parameters gradients
         optimizer.zero_grad()
@@ -419,20 +361,10 @@ def do_epoch_train(loader_train_source, model, criterion1, optimizer, scheduler_
         logits2_source = torch.mm(logits1_source, mapping) / (1e-6 + torch.sum(mapping, dim=0))
         _, preds2_source = torch.max(logits2_source, dim=1)
 
-        # Forward pass for target data
-        # logits1_target = model(images_target)
-        # _, preds1_target = torch.max(logits1_target, dim=1)
-
-        # tmp = np.load('mapping.npz')
-        # mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
-        # logits2_target = torch.mm(logits1_target, mapping) / (1e-6 + torch.sum(mapping, dim=0))
-        # _, preds2_target = torch.max(logits2_target, dim=1)
-
         # Losses
         loss1_source = args.mu1 * criterion1(logits1_source, categories1_source)
         loss2_source = args.mu2 * criterion1(logits2_source, categories2_source)
-        # loss2_target = args.mu3 * criterion1(logits2_target, categories2_target)
-        loss = loss1_source + loss2_source #+ loss2_target
+        loss = loss1_source + loss2_source 
 
         # Back-propagation
         loss.backward()
@@ -451,7 +383,6 @@ def do_epoch_train(loader_train_source, model, criterion1, optimizer, scheduler_
         running_loss.append(loss.item())
         running_loss1_source.append(loss1_source.item())
         running_loss2_source.append(loss2_source.item())
-        # running_loss2_target.append(loss2_target.item())
 
         # Update metrics
         oa1 = torch.sum(preds1_source == categories1_source.squeeze()) / len(categories1_source)
@@ -484,7 +415,6 @@ def do_epoch_train(loader_train_source, model, criterion1, optimizer, scheduler_
         'loss': np.mean(running_loss),
         'loss1_source': np.mean(running_loss1_source),
         'loss2_source': np.mean(running_loss2_source),
-        # 'loss2_target': np.mean(running_loss2_target),
         'oa1': np.mean(running_oa1),
         'mca1': np.mean(mca1_num/mca1_den),
         'oa2': np.mean(running_oa2),
@@ -500,25 +430,18 @@ def do_epoch_valid(loader_valid_source, model, criterion1, args):
     model = model.eval()
 
     # Init stats
-    running_loss, running_loss1_source, running_loss2_source, running_loss2_target = list(), list(), list(), list()
+    running_loss, running_loss1_source, running_loss2_source = list(), list(), list()
     running_oa1, running_mca1_num, running_mca1_den = list(), list(), list()
     running_oa2, running_mca2_num, running_mca2_den = list(), list(), list()
 
     # Loop over validation mini-batches
     for data_source in loader_valid_source:
-    # for data_source, data_target in zip(loader_valid_source, loader_valid_target):
 
         # Load source mini-batch
         images_source, categories1_source, categories2_source = data_source
         images_source = images_source.to(args.device, non_blocking=True)
         categories1_source = categories1_source.to(args.device, non_blocking=True)
         categories2_source = categories2_source.to(args.device, non_blocking=True)
-
-        # Load target mini-batch
-        # images_target, categories1_target, categories2_target = data_target
-        # images_target = images_target.to(args.device, non_blocking=True)
-        # categories1_target = categories1_target.to(args.device, non_blocking=True)
-        # categories2_target = categories2_target.to(args.device, non_blocking=True)
 
         with torch.inference_mode():
 
@@ -531,26 +454,15 @@ def do_epoch_valid(loader_valid_source, model, criterion1, args):
             logits2_source = torch.mm(logits1_source, mapping) / (1e-6 + torch.sum(mapping, dim=0))
             _, preds2_source = torch.max(logits2_source, dim=1)
 
-            # Forward pass for target data
-            # logits1_target = model(images_target)
-            # _, preds1_target = torch.max(logits1_target, dim=1)
-
-            # tmp = np.load('mapping.npz')
-            # mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
-            # logits2_target = torch.mm(logits1_target, mapping) / (1e-6 + torch.sum(mapping, dim=0))
-            # _, preds2_target = torch.max(logits2_target, dim=1)
-
             # Losses
             loss1_source = args.mu1 * criterion1(logits1_source, categories1_source)
             loss2_source = args.mu2 * criterion1(logits2_source, categories2_source)
-            # loss2_target = args.mu3 * criterion1(logits2_target, categories2_target)
-            loss = loss1_source + loss2_source #+ loss2_target
+            loss = loss1_source + loss2_source 
 
         # Update losses
         running_loss.append(loss.item())
         running_loss1_source.append(loss1_source.item())
         running_loss2_source.append(loss2_source.item())
-        # running_loss2_target.append(loss2_target.item())
 
         # Update metrics
         oa1 = torch.sum(preds1_source == categories1_source.squeeze()) / len(categories1_source)
@@ -582,7 +494,6 @@ def do_epoch_valid(loader_valid_source, model, criterion1, args):
         'loss': np.mean(running_loss),
         'loss1_source': np.mean(running_loss1_source),
         'loss2_source': np.mean(running_loss2_source),
-        # 'loss2_target': np.mean(running_loss2_target),
         'oa1': np.mean(running_oa1),
         'mca1': np.mean(mca1_num/mca1_den),
         'oa2': np.mean(running_oa2),
@@ -602,7 +513,6 @@ def update_wandb(epoch, optimizer, stats_train, stats_valid):
         "train/loss": stats_train['loss'].item(),
         "train/loss1_source": stats_train['loss1_source'].item(),
         "train/loss2_source": stats_train['loss2_source'].item(),
-        # "train/loss2_target": stats_train['loss2_target'].item(),
         "train/oa1": stats_train['oa1'].item(),
         "train/mca1": stats_train['mca1'].item(),
         "train/oa2": stats_train['oa2'].item(),
@@ -611,7 +521,6 @@ def update_wandb(epoch, optimizer, stats_train, stats_valid):
         "valid/loss": stats_valid['loss'].item(),
         "valid/loss1_source": stats_valid['loss1_source'].item(),
         "valid/loss2_source": stats_valid['loss2_source'].item(),
-        # "valid/loss2_target": stats_valid['loss2_target'].item(),
         "valid/oa1": stats_valid['oa1'].item(),
         "valid/mca1": stats_valid['mca1'].item(),
         "valid/oa2": stats_valid['oa2'].item(),

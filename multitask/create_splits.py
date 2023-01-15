@@ -5,8 +5,8 @@ import numpy as np
 sys.path.append('..')
 from utils import sorted_alphanumeric
 
-path_input = os.path.join('..', 'data', 'splits_baseline')
-path_output = os.path.join('..', 'data', 'splits_multitask')
+path_input = os.path.join('..','..', 'data', 'splits_baseline')
+path_output = os.path.join('..','..', 'data', 'splits_multitask')
 
 # furniture 0 (5 instances)
 # mammal 1 (9 instances)
@@ -38,33 +38,77 @@ CATEGORIES = [
     [11, 'book', 4, 'office'],
     [12, 'bridge', 3, 'building'],
     [13, 'bus', 5, 'road_transport'],
-    [14, 'butterfly', 12, 'insect'],  
-    [15, 'cake', 6, 'food'],
-    [16, 'calculator', 2, 'electricity'],
-    [17, 'camera', 2, 'electricity'],
-    [18, 'car', 5, 'road_transport'],
-    [19, 'cat', 1, 'mammal'],
-    [20, 'chair', 0, 'furniture'],
-    [21, 'clock', 4, 'office'],
-    [22, 'cow', 1, 'mammal'],
-    [23, 'dog', 1, 'mammal'],
-    [24, 'dolphin', 1, 'mammal'],
-    [25, 'donut', 6, 'food'],
-    [26, 'drums', 7, 'music'],
-    [27, 'duck', 9, 'bird'],
-    [28, 'elephant', 1, 'mammal'],
-    [29, 'fence', 0, 'furniture'],
-    [30, 'fork', 10, 'kitchen'],
-    [31, 'horse', 1, 'mammal'],
-    [32, 'house', 3, 'building'],
-    [33, 'rabbit', 1, 'mammal'],
-    [34, 'scissors', 4, 'office'],
-    [35, 'sheep', 1, 'mammal'],
-    [36, 'strawberry', 8, 'fruit'],
-    [37, 'table', 0, 'furniture'],
-    [38, 'telephone', 2, 'electricity'],
-    [39, 'truck', 5, 'road_transport']
+    [14, 'cake', 6, 'food'],
+    [15, 'calculator', 2, 'electricity'],
+    [16, 'camera', 2, 'electricity'],
+    [17, 'car', 5, 'road_transport'],
+    [18, 'cat', 1, 'mammal'],
+    [19, 'chair', 0, 'furniture'],
+    [20, 'clock', 4, 'office'],
+    [21, 'cow', 1, 'mammal'],
+    [22, 'dog', 1, 'mammal'],
+    [23, 'dolphin', 1, 'mammal'],
+    [24, 'duck', 9, 'bird'],
+    [25, 'elephant', 1, 'mammal'],
+    [26, 'fence', 0, 'furniture'],
+    [27, 'fork', 10, 'kitchen'],
+    [28, 'horse', 1, 'mammal'],
+    [29, 'house', 3, 'building'],
+    [30, 'rabbit', 1, 'mammal'],
+    [31, 'scissors', 4, 'office'],
+    [32, 'strawberry', 8, 'fruit'],
+    [33, 'table', 0, 'furniture'],
+    [34, 'telephone', 2, 'electricity'],
+    [35, 'truck', 5, 'road_transport'],
+    [36, 'butterfly', 12, 'insect'],  
+    [37, 'sheep', 1, 'mammal'],
+    [38, 'drums', 7, 'music'],
+    [39, 'donut', 6, 'food'],
     ]
+
+# ERRONEOUS CLASSES DomainNet clustering
+# CATEGORIES = [
+#     [0, 'airplane', 11, 'sky_transport'],
+#     [1, 'ambulance', 5, 'road_transport'],
+#     [2, 'apple', 8, 'fruit'],
+#     [3, 'backpack', 4, 'office'],
+#     [4, 'banana', 8, 'fruit'],
+#     [5, 'bathtub', 0, 'furniture'],
+#     [6, 'bear', 1, 'mammal'],
+#     [7, 'bed', 0, 'furniture'],
+#     [8, 'bee', 12, 'insect'],
+#     [9, 'bicycle', 5, 'road_transport'],
+#     [10, 'bird', 9, 'bird'],
+#     [11, 'book', 4, 'office'],
+#     [12, 'bridge', 3, 'building'],
+#     [13, 'bus', 5, 'road_transport'],
+#     [14, 'butterfly', 12, 'insect'],  
+#     [15, 'cake', 6, 'food'],
+#     [16, 'calculator', 2, 'electricity'],
+#     [17, 'camera', 2, 'electricity'],
+#     [18, 'car', 5, 'road_transport'],
+#     [19, 'cat', 1, 'mammal'],
+#     [20, 'chair', 0, 'furniture'],
+#     [21, 'clock', 4, 'office'],
+#     [22, 'cow', 1, 'mammal'],
+#     [23, 'dog', 1, 'mammal'],
+#     [24, 'dolphin', 1, 'mammal'],
+#     [25, 'donut', 6, 'food'],
+#     [26, 'drums', 7, 'music'],
+#     [27, 'duck', 9, 'bird'],
+#     [28, 'elephant', 1, 'mammal'],
+#     [29, 'fence', 0, 'furniture'],
+#     [30, 'fork', 10, 'kitchen'],
+#     [31, 'horse', 1, 'mammal'],
+#     [32, 'house', 3, 'building'],
+#     [33, 'rabbit', 1, 'mammal'],
+#     [34, 'scissors', 4, 'office'],
+#     [35, 'sheep', 1, 'mammal'],
+#     [36, 'strawberry', 8, 'fruit'],
+#     [37, 'table', 0, 'furniture'],
+#     [38, 'telephone', 2, 'electricity'],
+#     [39, 'truck', 5, 'road_transport']
+#     ]
 
 # Safa's clustering
 # CATEGORIES = [
@@ -120,7 +164,7 @@ for file in list_files:
         with open(path_pointer) as f:
             for l in f.readlines():
                 s1 = l.split()[0]
-                s2 = l.split()[1]
+                s2 = l.split()[1] 
                 s3 = str(CATEGORIES[int(s2)][2])
                 pointer.append([s1, s2, s3])
         pointer = np.asarray(pointer)

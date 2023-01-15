@@ -74,9 +74,8 @@ def main():
     args = parse_args()
 
     # Update path to weights and runs
-    args.path_weights = os.path.join('..','..','data', 'exps', 'weights', args.exp)
-    args.path_runs = os.path.join('..','..','data', 'exps', 'runs', args.exp)
-
+    args.path_weights = os.path.join('..','..','data', 'exps', 'models', args.exp)
+    
     # Create experiment folder
     os.makedirs(args.path_weights, exist_ok=True)
 
@@ -85,7 +84,7 @@ def main():
 
     # # Create Wandb logger
     wandb.init(dir='../',
-      project='Multitask_2H', 
+      project='Sketch_2H', 
       name=args.exp,
       config = {"model_type": args.model_type,
                 "source_train": args.source_train,

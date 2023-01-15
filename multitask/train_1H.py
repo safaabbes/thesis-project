@@ -75,12 +75,8 @@ def main():
     args = parse_args()
 
     # Update path to weights and runs
-    args.path_weights = os.path.join('..', '..','data', 'exps', 'weights', args.exp)
-    args.path_pseudo = os.path.join('..','..','data', 'exps', 'pseudo', args.source_exp, args.pseudo_domain)
+    args.path_weights = os.path.join('..', '..','data', 'exps', 'models', args.exp)
     
-    checkpoint = torch.load(os.path.join(args.path_pseudo, '{:s}.tar'.format(args_test.checkpoint)))
-    
-
     # Create experiment folder
     os.makedirs(args.path_weights, exist_ok=True)
 
@@ -89,7 +85,7 @@ def main():
 
     # # Create Wandb logger
     wandb.init(dir='../',
-      project='Multitask_1H', 
+      project='Sketch_1H', 
       name=args.exp,
       config = {"model_type": args.model_type,
                 "source_train": args.source_train,
@@ -333,13 +329,15 @@ def run_train(args, logger):
         stats_train = do_epoch_train(loader_train_source, loader_train_target, model, criterion1, optimizer, scheduler_lr, scheduler_warmup, args)
         logger.info('TRN, Epoch: {:4d}, Loss: {:e}, OA1: {:.4f}, MCA1: {:.4f}, OA2: {:.4f}, MCA2: {:.4f}, Elapsed: {:.1f}s'.format(
             epoch, stats_train['loss'], stats_train['oa1'], stats_train['mca1'], stats_train['oa2'], stats_train['mca2'], time.time() - since))
-
+        # logger.info('TRN, Epoch: {:4d}, Loss: {:e}, OA1: {:.4f}, MCA1: {:.4f}, Elapsed: {:.1f}s'.format(
+        #     epoch, stats_train['loss'], stats_train['oa1'], stats_train['mca1'], time.time() - since))
         # Validation
         since = time.time()
         stats_valid = do_epoch_valid(loader_valid_source, loader_valid_target, model, criterion1, args)
         logger.info('VAL, Epoch: {:4d}, Loss: {:e}, OA1: {:.4f}, MCA1: {:.4f}, OA2: {:.4f}, MCA2: {:.4f}, Elapsed: {:.1f}s'.format(
-            epoch, stats_valid['loss'], stats_valid['oa1'], stats_valid['mca1'], stats_valid['oa2'], stats_train['mca2'], time.time() - since))
-
+            epoch, stats_valid['loss'], stats_valid['oa1'], stats_valid['mca1'], stats_valid['oa2'], stats_valid['mca2'], time.time() - since))
+        # logger.info('VAL, Epoch: {:4d}, Loss: {:e}, OA1: {:.4f}, MCA1: {:.4f}, Elapsed: {:.1f}s'.format(
+        #     epoch, stats_valid['loss'], stats_valid['oa1'], stats_valid['mca1'], time.time() - since))
         # Update Wandb logger
         update_wandb(epoch, optimizer, stats_train, stats_valid)
 
@@ -431,7 +429,7 @@ def do_epoch_train(loader_train_source, loader_train_target, model, criterion1, 
         _, preds2_target = torch.max(logits2_target, dim=1)
 
         # Losses
-        loss1_source = args.mu1 * criterion1(logits1_source, categories1_source)
+        loss1_source = args.mu1 * criterion1(logits1_source, categories1_source)  
         loss2_source = args.mu2 * criterion1(logits2_source, categories2_source)
         loss2_target = args.mu3 * criterion1(logits2_target, categories2_target)
         loss = loss1_source + loss2_source + loss2_target
@@ -542,7 +540,7 @@ def do_epoch_valid(loader_valid_source, loader_valid_target, model, criterion1, 
             _, preds2_target = torch.max(logits2_target, dim=1)
 
             # Losses
-            loss1_source = args.mu1 * criterion1(logits1_source, categories1_source)
+            loss1_source = args.mu1 * criterion1(logits1_source, categories1_source) 
             loss2_source = args.mu2 * criterion1(logits2_source, categories2_source)
             loss2_target = args.mu3 * criterion1(logits2_target, categories2_target)
             loss = loss1_source + loss2_source + loss2_target

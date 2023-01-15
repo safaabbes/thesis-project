@@ -144,16 +144,40 @@ class dataset2(torch.utils.data.Dataset):
     
 
 class PseudoLabelDataset(torch.utils.data.Dataset):
-    def __init__(self, images, labels1, labels2):
+    def __init__(self, images, labels1, labels2, augm_type):
         self.images = images
         self.labels1 = labels1
         self.labels2 = labels2
+        
+        # Data augmentation
+        if augm_type == 'train':
+            self.transforms = t.Compose([
+                # t.Resize((256, 256)),
+                # t.RandomCrop((224, 224)),
+                t.RandomHorizontalFlip(p=0.5),
+                # Additional Augmentations
+                t.RandomHorizontalFlip(p=0.5),
+                t.RandomVerticalFlip(p=0.5),
+                t.RandomRotation(degrees=90),
+                t.GaussianBlur(kernel_size=5),
+                # t.ColorJitter(brightness=0.5, hue=0.5), This gives out nan in loss when used
+                # t.ToTensor(),
+                # t.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                ])
 
+        else:
+            self.transforms = t.Compose([
+                t.Resize((224, 224)),
+                t.ToTensor(),
+                t.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                ])
+            
     def __len__(self):
         return len(self.images)
 
     def __getitem__(self, index):
         image = self.images[index]
+        image = self.transforms(image)
         label1 = self.labels1[index]
         label2 = self.labels2[index]
         return image, label1, label2
