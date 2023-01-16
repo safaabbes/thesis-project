@@ -2,6 +2,18 @@ import logging
 import re
 
 
+def deprocess(image):
+    # Remove the normalization
+    image = image.clone()
+    image[0] = image[0]*0.229 + 0.485
+    image[1] = image[1]*0.224 + 0.456
+    image[2] = image[2]*0.225 + 0.406
+    # Convert the image from tensor to numpy
+    image = image.cpu().numpy()
+    # Transpose the image from (C, H, W) to (H, W, C)
+    image = image.transpose((1, 2, 0))
+    return image
+
 def sorted_alphanumeric(data):
     '''
     https://gist.github.com/SeanSyue/8c8ff717681e9ecffc8e43a686e68fd9

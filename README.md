@@ -1,5 +1,11 @@
 # thesis-project
 
+Deadline: \
+Final exam registration by 16 February 2023 \
+Exams' registration deadline 2 March 2023 \
+Thesis Upload 16 March 2023 \
+Final Exam 23 March 2023 \
+
 Variables: \
 Level train_source: \
         - use 1 or 2 head method \
@@ -13,8 +19,26 @@ Level test_pseudo: \
 Level train_pseudo: \
         - use 1 or 2 head method (independant from how many heads where used when making the train source) \
         
+Afkar: kifech tnajem ta9na3 li il ta7asson sar 5atir il cluster mouch 5atir sar basic multi-task strategy
 
 ### TODO List
+(10/01/2022)
+- [x] Found the reason behind the 2 codes gap: wrong original class labeling which made wrong clusters
+- [x] Create Table Analysis of Pseudo Labels and Testing 
+- [x] Implement GradCam
+- [ ] Use another loss criterion for pseudo labels
+- [ ] Complete first draft related work (add summary table, extend and discuss)
+- [ ] Complete first draft intro 
+- [x] Add Dropout on Pseudo Labels
+- [ ] Train Target Pseudo Labels with classes supervision only (model from scratch without Source Domain)
+- [x] Train Continuously Source > +Target Pseudo Labels with classes 
+- [x] Train Target Pseudo Labels from scratch with Source Domain 
+- [x] Discard Data augmentation when getting Pseudo labels and doing Data Augmentation when training them
+- [x] Joint conditioning Between Confidence and Coherence
+- [x] Compute Confusion matrix of Pseudo Labels
+- [ ] Analyse different layer behaviour with Gradcam to see the effect of using superclasses 
+- [ ] use gradcam to show samples that were wrongly classified and got correctly classified with the super-classes
+- [ ] Analyse the behaviour of the model using other clustering, multiple clusters...
 
 (20/12/2022)
 - [x] Analyze Pseudo labels strategy: softmax + threshold/ get pseudo labels when class prediction belong to cluster prediction
