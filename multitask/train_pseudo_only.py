@@ -12,7 +12,6 @@ import torchinfo
 import pytorch_warmup as warmup
 import wandb
 
-
 from datasets import dataset2 as dataset
 from datasets import PseudoLabelDataset
 from models import resnet50s_1head

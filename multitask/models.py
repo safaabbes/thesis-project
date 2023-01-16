@@ -3,7 +3,6 @@ import torch
 import torchvision
 import torch.nn.functional as F
 
-
 class resnet50a(torch.nn.Module):
 
     def __init__(self, args):
