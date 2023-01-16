@@ -114,6 +114,7 @@ def run_test(args, logger, checkpoint):
         pin_memory=True,
         drop_last=False)
 
+
     # Get model
     if args.model_type.lower() == 'resnet50s':
         model = resnet50s(args)
@@ -130,30 +131,21 @@ def run_test(args, logger, checkpoint):
     # Put model in evaluation mode
     model.eval()
     
-    pseudo_labels_1 = torch.zeros(len(dataset_test), dtype=torch.long).to(args.device)
-    pseudo_labels_2 = torch.zeros(len(dataset_test), dtype=torch.long).to(args.device)
-
     # Init stats
     running_oa1, running_mca1_num, running_mca1_den = list(), list(), list()
     running_oa2, running_mca2_num, running_mca2_den = list(), list(), list()
     ground_truth_1, ground_truth_2 = list(), list()
-
-
-    # Determine the size and data type of the images and labels
-    image_size = (3, 224, 224)  
-    image_dtype = torch.float  
-    label_dtype = torch.long  
-    max_num_images = 17000
-    pseudo_images = torch.empty((max_num_images, *image_size), dtype=image_dtype)
-    pseudo_labels1 = torch.empty(max_num_images, dtype=label_dtype)
-    pseudo_labels2 = torch.empty(max_num_images, dtype=label_dtype)
-    num_images = 0
-    num_labels1 = 0
-    num_labels2 = 0
+    pseudo_labels_1 = torch.zeros(len(dataset_test), dtype=torch.long).to(args.device)
+    pseudo_labels_2 = torch.zeros(len(dataset_test), dtype=torch.long).to(args.device)
+    file_names = loader_test.dataset.pointer
+    pseudo_file_names = list()
     
     # Loop over test mini-batches
     for i, data in enumerate(loader_test):
-
+        start = i * args.bs % len(file_names)
+        end = start + args.bs
+        images_file_names = file_names[start:end]
+        
         # Load mini-batch
         images, categories1, categories2 = data
         images = images.to(args.device, non_blocking=True)
@@ -183,12 +175,7 @@ def run_test(args, logger, checkpoint):
                 threshold = float(args.condition)
                 for j, p in enumerate(prob2):
                     if p.item() > threshold:
-                        pseudo_images[num_images] = images[j]
-                        pseudo_labels1[num_labels1] = preds1[j]
-                        pseudo_labels2[num_labels2] = preds2[j]
-                        num_images += 1
-                        num_labels1 += 1
-                        num_labels2 += 1     
+                        pseudo_file_names.append([str(images_file_names[j][0]), str(preds1[j]), str(preds2[j])])    
                         
                 mask = prob1 > threshold
                 pseudo_labels_1[i*args.bs : (i+1)*args.bs][mask] = preds1[mask]
@@ -202,19 +189,9 @@ def run_test(args, logger, checkpoint):
                 one_hot_preds2 = torch.nn.functional.one_hot(preds2, num_classes=args.num_categories2).to(torch.float)
                 preds1_true_sc = torch.mm(one_hot_preds1, mapping)
                 mask = (preds1_true_sc == one_hot_preds2).all(dim=1)
-                logger.info('cat1 {}'.format(categories1))
-                logger.info('pre1 {}'.format(preds1))
-                logger.info('cat2 {}'.format(categories2))
-                logger.info('pre2 {}'.format(preds2))
-                logger.info('mask {}'.format(mask))
                 for j, p in enumerate(mask):
                     if p.item() :
-                        pseudo_images[num_images] = images[j]
-                        pseudo_labels1[num_labels1] = preds1[j]
-                        pseudo_labels2[num_labels2] = preds2[j]
-                        num_images += 1
-                        num_labels1 += 1
-                        num_labels2 += 1
+                        pseudo_file_names.append([str(images_file_names[j][0]), str(preds1[j]), str(preds2[j])])
                         
                 pseudo_labels_1[i*args.bs : (i+1)*args.bs][mask] = preds1[mask]
                 pseudo_labels_1[i*args.bs : (i+1)*args.bs][~mask] = -1
@@ -227,12 +204,7 @@ def run_test(args, logger, checkpoint):
                 mask = (preds1_true_sc == one_hot_preds2).all(dim=1)
                 for j, p in enumerate(mask):
                     if p.item() and prob1[j]>threshold:
-                        pseudo_images[num_images] = images[j]
-                        pseudo_labels1[num_labels1] = preds1[j]
-                        pseudo_labels2[num_labels2] = preds2[j]
-                        num_images += 1
-                        num_labels1 += 1
-                        num_labels2 += 1
+                        pseudo_file_names.append([str(images_file_names[j][0]), str(preds1[j].cpu().tolist()), str(preds2[j].cpu().tolist())])
                         
                 mask_confidence = prob1 > threshold
                 mask_coherence = (preds1_true_sc == one_hot_preds2).all(dim=1)
@@ -282,7 +254,6 @@ def run_test(args, logger, checkpoint):
             if pseudo_labels_1[i] == ground_truth_1[i]:
                 count += 1
                 
-    
     # Convert ground truth and predictions to NumPy arrays
     y_true = np.array(pseudo_ground_truth_1)
     y_pred = np.array(actual_pseudo_labels_1)
@@ -297,19 +268,19 @@ def run_test(args, logger, checkpoint):
     total_samples_pseudo_classes = np.array(pseudo_ground_truth_1)
     total_samples_classes_mat = confusion_matrix(total_samples_classes, total_samples_classes)
     total_samples_pseudo_classes_mat = confusion_matrix(total_samples_pseudo_classes, total_samples_pseudo_classes)
-    # percentages= total_samples_pseudo_classes_mat.diagonal() / total_samples_classes_mat.diagonal() 
+    percentages= total_samples_pseudo_classes_mat.diagonal() / total_samples_classes_mat.diagonal() 
     
     # Save Table Analysis
     x = total_samples_classes_mat.diagonal()
     y = total_samples_pseudo_classes_mat.diagonal()
-    # z = np.around(percentages,2)
+    z = np.around(percentages,2)
     a = confusion_mat.diagonal()
-    # b = accuracy_matrix.diagonal()
+    b = accuracy_matrix.diagonal()
     data = {'Original Per Class': x, 
             'Pseudo Classes': y, 
-            # 'Pseudo Class %': z,
+            'Pseudo Class %': z,
             'Correct Pseudo Classes': a,
-            # 'Correct Pseudo Class %': b,
+            'Correct Pseudo Class %': b,
             }
     df = pd.DataFrame(data)
     df = df.T
@@ -407,20 +378,14 @@ def run_test(args, logger, checkpoint):
     logger.info('\t Percentage over total training samples =  {:.2f}%'.format(count/filtered_pseudo_labels_2*100))
     logger.info('\t Number of Erroneous Pseudo Labels =  {}'.format(filtered_pseudo_labels_2-count))
     
-    pseudo_images = pseudo_images[:num_images]
-    pseudo_labels1 = pseudo_labels1[:num_labels1]
-    pseudo_labels2 = pseudo_labels2[:num_labels2]
-    
-    torch.save({'images': pseudo_images, 
-                'pseudo_labels1': pseudo_labels1,
-                'pseudo_labels2': pseudo_labels2,
+    torch.save({'images_file_array': pseudo_file_names, 
                 'pseudo_domain': args.target_train,
                 'source_exp': args.exp,
                 'checkpoint': args.checkpoint,
                 'condition': args.condition,
                 }, os.path.join(args.path_pseudo, '{}_{}_{}.tar'.format(args.target_train, args.checkpoint, args.condition)))
     
-    logger.info('\t PseudoLabelDataset length =  {}'.format(len(pseudo_images)))
+    logger.info('\t PseudoLabelDataset length =  {}'.format(len(pseudo_file_names)))
        
     # Update MCA metric
     mca1_num = np.sum(running_mca1_num, axis=0)

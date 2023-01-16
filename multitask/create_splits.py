@@ -8,7 +8,7 @@ from utils import sorted_alphanumeric
 path_input = os.path.join('..','..', 'data', 'splits_baseline')
 path_output = os.path.join('..','..', 'data', 'splits_multitask')
 
-# furniture 0 (5 instances)
+# furniture 0 (5 instances) 
 # mammal 1 (9 instances)
 # electricity 2 (3 instances)
 # building 3 (2 instances)
@@ -75,21 +75,21 @@ CATEGORIES = [
 #     [4, 'banana', 8, 'fruit'],
 #     [5, 'bathtub', 0, 'furniture'],
 #     [6, 'bear', 1, 'mammal'],
-#     [7, 'bed', 0, 'furniture'],
-#     [8, 'bee', 12, 'insect'],
-#     [9, 'bicycle', 5, 'road_transport'],
-#     [10, 'bird', 9, 'bird'],
-#     [11, 'book', 4, 'office'],
-#     [12, 'bridge', 3, 'building'],
-#     [13, 'bus', 5, 'road_transport'],
-#     [14, 'butterfly', 12, 'insect'],  
-#     [15, 'cake', 6, 'food'],
-#     [16, 'calculator', 2, 'electricity'],
-#     [17, 'camera', 2, 'electricity'],
-#     [18, 'car', 5, 'road_transport'],
-#     [19, 'cat', 1, 'mammal'],
-#     [20, 'chair', 0, 'furniture'],
-#     [21, 'clock', 4, 'office'],
+    # [7, 'bed', 0, 'furniture'],
+    # [8, 'bee', 12, 'insect'],
+    # [9, 'bicycle', 5, 'road_transport'],
+    # [10, 'bird', 9, 'bird'],
+    # [11, 'book', 4, 'office'],
+    # [12, 'bridge', 3, 'building'],
+    # [13, 'bus', 5, 'road_transport'],
+    # [14, 'butterfly', 12, 'insect'],  
+    # [15, 'cake', 6, 'food'],
+    # [16, 'calculator', 2, 'electricity'],
+    # [17, 'camera', 2, 'electricity'],
+    # [18, 'car', 5, 'road_transport'],
+    # [19, 'cat', 1, 'mammal'],
+    # [20, 'chair', 0, 'furniture'],
+    # [21, 'clock', 4, 'office'],
 #     [22, 'cow', 1, 'mammal'],
 #     [23, 'dog', 1, 'mammal'],
 #     [24, 'dolphin', 1, 'mammal'],

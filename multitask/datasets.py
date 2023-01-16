@@ -1,4 +1,3 @@
-
 import copy
 import glob
 import json
@@ -9,7 +8,6 @@ import time
 
 import torch
 import torchvision.transforms as t
-
 
 class dataset1(torch.utils.data.Dataset):
 
@@ -83,6 +81,7 @@ class dataset2(torch.utils.data.Dataset):
 
     def __init__(self, domain_type, augm_type):
 
+
         # Get pointers
         pointer = list()
         path_pointer = '../../data/splits_multitask/{:s}_mini.txt'.format(domain_type)
@@ -128,7 +127,7 @@ class dataset2(torch.utils.data.Dataset):
         with open(os.path.join('..','..','data', self.pointer[index, 0]), 'rb') as _:
             image = Image.open(_)
             image = image.convert('RGB')  # PIL object
-
+            
         # Apply data augmentation
         image = self.transforms(image)  # PyTorch tensor
 
@@ -144,25 +143,22 @@ class dataset2(torch.utils.data.Dataset):
     
 
 class PseudoLabelDataset(torch.utils.data.Dataset):
-    def __init__(self, images, labels1, labels2, augm_type):
-        self.images = images
-        self.labels1 = labels1
-        self.labels2 = labels2
+    def __init__(self, pointer, augm_type):
+        self.pointer = np.asarray(pointer)
         
         # Data augmentation
         if augm_type == 'train':
             self.transforms = t.Compose([
-                # t.Resize((256, 256)),
-                # t.RandomCrop((224, 224)),
+                t.Resize((256, 256)),
+                t.RandomCrop((224, 224)),
                 t.RandomHorizontalFlip(p=0.5),
                 # Additional Augmentations
                 t.RandomHorizontalFlip(p=0.5),
                 t.RandomVerticalFlip(p=0.5),
                 t.RandomRotation(degrees=90),
                 t.GaussianBlur(kernel_size=5),
-                # t.ColorJitter(brightness=0.5, hue=0.5), This gives out nan in loss when used
-                # t.ToTensor(),
-                # t.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                t.ToTensor(),
+                t.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
                 ])
 
         else:
@@ -173,11 +169,18 @@ class PseudoLabelDataset(torch.utils.data.Dataset):
                 ])
             
     def __len__(self):
-        return len(self.images)
+        return len(self.pointer)
 
     def __getitem__(self, index):
-        image = self.images[index]
-        image = self.transforms(image)
-        label1 = self.labels1[index]
-        label2 = self.labels2[index]
-        return image, label1, label2
+        with open(os.path.join('..','..','data', self.pointer[index, 0]), 'rb') as _:
+            image = Image.open(_)
+            image = image.convert('RGB')  # PIL object
+            
+        # Apply data augmentation
+        image = self.transforms(image)  # PyTorch tensor
+
+        # Load labels
+        category1 = torch.tensor(int(self.pointer[index, 1]), dtype=torch.long)  # PyTorch tensor
+        category2 = torch.tensor(int(self.pointer[index, 2]), dtype=torch.long)  # PyTorch tensor
+
+        return image, category1, category2
