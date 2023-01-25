@@ -16,8 +16,8 @@ from pytorch_grad_cam.utils.image import show_cam_on_image, deprocess_image
 import cv2
 from PIL import Image, ImageDraw, ImageFont 
 
-from datasets import dataset2 as dataset
-from models import resnet50s
+from datasets_biased import dataset2_biased as dataset
+from models import resnet50s_1head
 sys.path.append('..')
 from utils import get_logger, deprocess
 
@@ -50,7 +50,7 @@ def main():
     args_test = parse_args()
 
     # Update path to weights and runs
-    args_test.path_weights = os.path.join('..','..', 'data', 'exps', 'models', args_test.exp)
+    args_test.path_weights = os.path.join('..','..', 'data', 'exps', 'biased_models', args_test.exp)
 
     # Load checkpoint
     checkpoint = torch.load(os.path.join(args_test.path_weights, '{:s}.tar'.format(args_test.checkpoint)))
@@ -110,8 +110,8 @@ def run_test(args, logger, checkpoint):
         drop_last=False)
 
     # Get model
-    if args.model_type.lower() == 'resnet50s':
-        model = resnet50s(args)
+    if args.model_type.lower() == 'resnet50s_1head':
+        model = resnet50s_1head(args)
     else:
         raise NotImplementedError
 
@@ -145,12 +145,15 @@ def run_test(args, logger, checkpoint):
         with torch.inference_mode():
 
             # Forward pass
-            logits1, logits2 = model(images)
+            logits1 = model(images)
             _, preds1 = torch.max(logits1, dim=1)
             predictions_1.extend(preds1.tolist())
+
+            tmp = np.load('biased_mapping.npz')
+            mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+            logits2 = torch.mm(logits1, mapping) / (1e-6 + torch.sum(mapping, dim=0))
             _, preds2 = torch.max(logits2, dim=1)
             predictions_2.extend(preds2.tolist())
-            
 
         # Update metrics
         oa1 = torch.sum(preds1 == categories1.squeeze()) / len(categories1)
@@ -172,7 +175,9 @@ def run_test(args, logger, checkpoint):
             torch.nn.functional.one_hot(categories2, num_classes=args.num_categories2), dim=0)
         running_mca2_num.append(mca2_num.detach().cpu().numpy())
         running_mca2_den.append(mca2_den.detach().cpu().numpy())
-
+        
+        # logger.info('categories1 {}'.format(categories1))
+        # logger.info('preds1 {}'.format(preds1))
         # Apply GradCam to 6 random images
         if i in range(5):
             j=3

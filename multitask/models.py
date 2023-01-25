@@ -231,7 +231,7 @@ class resnet50s_1head(torch.nn.Module):
         torch.nn.init.xavier_normal_(self.head.weight)
 
     def forward(self, x):
-        x = self.backbone(x)
-        x = F.normalize(x)
+        f = self.backbone(x)
+        x = F.normalize(f)
         score1 = self.head(x) / self.temperature
-        return score1
+        return f, score1

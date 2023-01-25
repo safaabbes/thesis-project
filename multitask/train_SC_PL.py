@@ -13,7 +13,8 @@ import pytorch_warmup as warmup
 import wandb
 
 from datasets import dataset2 as dataset
-from models import resnet50a, resnet50b, resnet50c, resnet50d, resnet50e, resnet50s
+from datasets import PseudoLabelDataset
+from models import resnet50s_1head
 from losses import loss_ce, loss_op
 sys.path.append('..')
 from utils import get_logger
@@ -26,9 +27,15 @@ def parse_args():
     # General
     parser.add_argument('--exp', type=str, required=True)
     parser.add_argument('--device', type=str, default='cuda')
-    parser.add_argument('--num_workers', type=int, default=2)
+    parser.add_argument('--num_workers', type=int, default=0)
     parser.add_argument('--seed', type=int, default=None)
     parser.add_argument('--freq_saving', type=int, default=10)
+    
+    # Pseudo
+    parser.add_argument('--source_exp', type=str, required=True)
+    parser.add_argument('--pseudo_domain', type=str, required=True)
+    parser.add_argument('--checkpoint', type=str, required=True)
+    parser.add_argument('--condition', type=str, required=True)
 
     # Train
     parser.add_argument('--bs', type=int, default=16)
@@ -38,7 +45,6 @@ def parse_args():
     # Data
     parser.add_argument('--source_train', type=str, required=True)
     parser.add_argument('--source_test', type=str, required=True)
-    parser.add_argument('--target_train', type=str, required=True)
     parser.add_argument('--target_test', type=str, required=True)
 
     # Model
@@ -57,6 +63,8 @@ def parse_args():
     parser.add_argument('--step', type=int, default=None)
     parser.add_argument('--gamma', type=float, default=None)
     parser.add_argument('--use_warmup', default=False, action='store_true')
+    parser.add_argument('--pred_method', type=str, default='mean')
+    
 
     # Loss
     parser.add_argument('--reduction', type=str, default='mean')
@@ -69,12 +77,14 @@ def parse_args():
 
 
 def main():
+    
 
     # Parse input arguments
     args = parse_args()
 
     # Update path to weights and runs
-    args.path_weights = os.path.join('..','..','data', 'exps', 'models', args.exp)
+    args.path_weights = os.path.join('..', '..','data', 'exps', 'models', args.exp)
+    args.path_pseudo = os.path.join('..','..','data', 'exps', 'pseudo_labels', args.source_exp)
     
     # Create experiment folder
     os.makedirs(args.path_weights, exist_ok=True)
@@ -84,12 +94,12 @@ def main():
 
     # # Create Wandb logger
     wandb.init(dir='../',
-      project='Sketch_2H', 
+      project='Sketch_1H', 
       name=args.exp,
       config = {"model_type": args.model_type,
                 "source_train": args.source_train,
                 "source_test": args.source_test,
-                "target_train": args.target_train,
+                "target_train": args.pseudo_domain,
                 "target_test": args.target_test,
                 "epochs": args.num_epochs,
                 "batch_size": args.bs,
@@ -139,10 +149,11 @@ def run_train(args, logger):
         domain_type=args.source_test,
         augm_type='test')
 
-    # Get the target datasets
-    dataset_train_target = dataset(
-        domain_type=args.target_train,
-        augm_type='train')
+    # Get the target dataset
+    pseudo_target_tensors = torch.load(os.path.join(args.path_pseudo,'{}_{}_{}.tar'.format(args.pseudo_domain, args.checkpoint, args.condition)))
+    PL_file_array = pseudo_target_tensors['images_file_array']
+
+    dataset_train_target = PseudoLabelDataset(PL_file_array, augm_type='train') 
     dataset_valid_target = dataset(
         domain_type=args.target_test,
         augm_type='test')
@@ -150,7 +161,7 @@ def run_train(args, logger):
     # Log stats
     logger.info('Source samples, Training: {:d}, Validation: {:d}'.format(
         len(dataset_train_source), len(dataset_valid_source)))
-    logger.info('Target samples, Training: {:d}, Validation: {:d}'.format(
+    logger.info('Target samples, Training(PL): {:d}, Validation: {:d}'.format(
         len(dataset_train_target), len(dataset_valid_target)))
 
     # Get the source dataloaders
@@ -202,8 +213,8 @@ def run_train(args, logger):
         drop_last=False)
 
     # Get the model
-    if args.model_type.lower() == 'resnet50s':
-        model = resnet50s(args)
+    if args.model_type.lower() == 'resnet50s_1head':
+        model = resnet50s_1head(args)
     else:
         raise NotImplementedError
 
@@ -221,7 +232,7 @@ def run_train(args, logger):
     # Set the model in training mode
     model.train()
 
-    # Get the model summary
+    # # Get the model summary
     # if torch.cuda.device_count() == 1:
     #     logger.info('Model summary:')
     #     stats = torchinfo.summary(model, (args.bs, 3, 128, 128))
@@ -240,7 +251,7 @@ def run_train(args, logger):
     #         if param.requires_grad is True:
     #             logger.info(name)
 
-    head = ['head1.weight', 'head1.bias', 'head2.weight', 'head2.bias']
+    head = ['head.weight', 'head.bias']
     params_head = list(filter(lambda kv: kv[0] in head, model.named_parameters()))
     params_back = list(filter(lambda kv: kv[0] not in head, model.named_parameters()))
     # logger.info('Learnable backbone parameters:')
@@ -325,7 +336,7 @@ def run_train(args, logger):
 
         # Training
         since = time.time()
-        stats_train = do_epoch_train(loader_train_source, loader_train_target, model, criterion1, optimizer, scheduler_lr, scheduler_warmup, args)
+        stats_train = do_epoch_train(loader_train_source, loader_train_target, model, criterion1, optimizer, scheduler_lr, scheduler_warmup, args, logger)
         logger.info('TRN, Epoch: {:4d}, Loss: {:e}, OA1: {:.4f}, MCA1: {:.4f}, OA2: {:.4f}, MCA2: {:.4f}, Elapsed: {:.1f}s'.format(
             epoch, stats_train['loss'], stats_train['oa1'], stats_train['mca1'], stats_train['oa2'], stats_train['mca2'], time.time() - since))
 
@@ -357,11 +368,10 @@ def run_train(args, logger):
         os.path.join(args.path_weights, 'last.tar'))
 
     end = time.time()
-    wandb.finish()
     logger.info('Elapsed time: {:.2f} minutes'.format((end - start)/60))
 
 
-def do_epoch_train(loader_train_source, loader_train_target, model, criterion1, optimizer, scheduler_lr, scheduler_warmup, args):
+def do_epoch_train(loader_train_source, loader_train_target, model, criterion1, optimizer, scheduler_lr, scheduler_warmup, args, logger):
 
     # Set the model in training mode
     model = model.train()
@@ -371,20 +381,7 @@ def do_epoch_train(loader_train_source, loader_train_target, model, criterion1, 
     running_oa1, running_mca1_num, running_mca1_den = list(), list(), list()
     running_oa2, running_mca2_num, running_mca2_den = list(), list(), list()
 
-    # Loop over training mini-batches
-
-    # Loop on the shorter dataloader
-    # for i, (data_source, data_target) in enumerate(zip(loader_train_source, loader_train_target)):
-
-    # Loop on the longer dataloader. Out-of-memory when using the real split
-    # i = 0
-    # max_iters = max(len(loader_train_source), len(loader_train_target))
-    # for data_source, data_target in zip(cycle(loader_train_source), cycle(loader_train_target)):
-    #     i += 1
-    #     if i == max_iters + 1:
-    #         break
-
-    # Loop on source dataloader. Source: https://stackoverflow.com/questions/51444059/how-to-iterate-over-two-dataloaders-simultaneously-using-pytorch
+    # Loop on source dataloader
     dataloader_iterator = iter(loader_train_target)
     for i, data_source in enumerate(loader_train_source):
         try:
@@ -400,26 +397,100 @@ def do_epoch_train(loader_train_source, loader_train_target, model, criterion1, 
         categories2_source = categories2_source.to(args.device, non_blocking=True)
 
         # Load target mini-batch
-        images_target, categories1_target, categories2_target = data_target
+        images_target, _, categories2_target = data_target
         images_target = images_target.to(args.device, non_blocking=True)
-        categories1_target = categories1_target.to(args.device, non_blocking=True)
+        # categories1_target = categories1_target.to(args.device, non_blocking=True)
         categories2_target = categories2_target.to(args.device, non_blocking=True)
 
         # Zero the parameters gradients
         optimizer.zero_grad()
 
         # Forward pass for source data
-        logits1_source, logits2_source = model(images_source)
+        logits1_source = model(images_source)
         _, preds1_source = torch.max(logits1_source, dim=1)
+
+        tmp = np.load('mapping.npz', allow_pickle=True)
+        mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+        logits2_source = torch.mm(logits1_source, mapping) / (1e-6 + torch.sum(mapping, dim=0)) 
+        
+        # if args.pred_method == 'mean':
+            # mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+            # logits2_source = torch.mm(logits1_source, mapping) / (1e-6 + torch.sum(mapping, dim=0)) 
+            
+        # elif args.pred_method == 'max':
+        #     mask = torch.tensor(tmp['data'], dtype=torch.bool, device=args.device, requires_grad=False)
+        #     logits2_source = []
+        #     for logit1 in logits1_source:
+        #         logit2 = []
+        #         for cluster in range(args.num_categories2):
+        #             cluster_logits = logit1[mask[:,cluster]]
+        #             max_cluster = torch.max(cluster_logits)
+        #             logit2.append(max_cluster)
+        #         logit2 = torch.stack([logit2[i] for i in range(len(logit2))])
+        #         logits2_source.append(logit2)
+        #     logits2_source = torch.stack([logits2_source[i] for i in range(len(logits2_source))])            
+
+        # elif args.pred_method == 'min':
+        #     mask = torch.tensor(tmp['data'], dtype=torch.bool, device=args.device, requires_grad=False)
+        #     logits2_source = []
+        #     for logit1 in logits1_source:
+        #         logit2 = []
+        #         for cluster in range(args.num_categories2):
+        #             cluster_logits = logit1[mask[:,cluster]]
+        #             min_cluster = torch.min(cluster_logits)
+        #             logit2.append(min_cluster)
+        #         logit2 = torch.stack([logit2[i] for i in range(len(logit2))])
+        #         logits2_source.append(logit2)
+        #     logits2_source = torch.stack([logits2_source[i] for i in range(len(logits2_source))])                
+
+        # elif args.pred_method == 'minmax':
+        #     NotImplementedError
+        
         _, preds2_source = torch.max(logits2_source, dim=1)
 
         # Forward pass for target data
-        logits1_target, logits2_target = model(images_target)
+        logits1_target = model(images_target)
         _, preds1_target = torch.max(logits1_target, dim=1)
+        mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+        logits2_target = torch.mm(logits1_target, mapping) / (1e-6 + torch.sum(mapping, dim=0)) 
+        
+        # if args.pred_method == 'mean':
+        #     mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+        #     logits2_target = torch.mm(logits1_target, mapping) / (1e-6 + torch.sum(mapping, dim=0)) 
+            
+        # elif args.pred_method == 'max':
+        #     mask = torch.tensor(tmp['data'], dtype=torch.bool, device=args.device, requires_grad=False)
+        #     logits2_target = []
+        #     for logit1 in logits1_target:
+        #         logit2 = []
+        #         for cluster in range(args.num_categories2):
+        #             cluster_logits = logit1[mask[:,cluster]]
+        #             max_cluster = torch.max(cluster_logits)
+        #             logit2.append(max_cluster)
+        #         logit2 = torch.stack([logit2[i] for i in range(len(logit2))])
+        #         logits2_target.append(logit2)
+        #     logits2_target = torch.stack([logits2_target[i] for i in range(len(logits2_target))])              
+
+        # elif args.pred_method == 'min':
+        #     mask = torch.tensor(tmp['data'], dtype=torch.bool, device=args.device, requires_grad=False)
+        #     logits2_target = []
+        #     for logit1 in logits1_target:
+        #         logit2 = []
+        #         for cluster in range(args.num_categories2):
+        #             cluster_logits = logit1[mask[:,cluster]]
+        #             min_cluster = torch.min(cluster_logits)
+        #             logit2.append(min_cluster)
+        #         logit2 = torch.stack([logit2[i] for i in range(len(logit2))])
+        #         logits2_target.append(logit2)
+        #     logits2_target = torch.stack([logits2_target[i] for i in range(len(logits2_target))])
+            
+        # elif args.pred_method == 'minmax':
+        #     NotImplementedError
+            
         _, preds2_target = torch.max(logits2_target, dim=1)
 
         # Losses
-        loss1_source = args.mu1 * criterion1(logits1_source, categories1_source)
+        loss1_source = args.mu1 * criterion1(logits1_source, categories1_source)  
         loss2_source = args.mu2 * criterion1(logits2_source, categories2_source)
         loss2_target = args.mu3 * criterion1(logits2_target, categories2_target)
         loss = loss1_source + loss2_source + loss2_target
@@ -512,17 +583,86 @@ def do_epoch_valid(loader_valid_source, loader_valid_target, model, criterion1, 
         with torch.inference_mode():
 
             # Forward pass for source data
-            logits1_source, logits2_source = model(images_source)
+            logits1_source = model(images_source)
             _, preds1_source = torch.max(logits1_source, dim=1)
+
+            tmp = np.load('mapping.npz', allow_pickle=True)
+            if args.pred_method == 'mean':
+                mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+                logits2_source = torch.mm(logits1_source, mapping) / (1e-6 + torch.sum(mapping, dim=0)) 
+                
+            elif args.pred_method == 'max':
+                mask = torch.tensor(tmp['data'], dtype=torch.bool, device=args.device, requires_grad=False)
+                logits2_source = []
+                for logit1 in logits1_source:
+                    logit2 = []
+                    for cluster in range(args.num_categories2):
+                        cluster_logits = logit1[mask[:,cluster]]
+                        max_cluster = torch.max(cluster_logits)
+                        logit2.append(max_cluster)
+                    logit2 = torch.stack([logit2[i] for i in range(len(logit2))])
+                    logits2_source.append(logit2)
+                logits2_source = torch.stack([logits2_source[i] for i in range(len(logits2_source))])            
+
+            elif args.pred_method == 'min':
+                mask = torch.tensor(tmp['data'], dtype=torch.bool, device=args.device, requires_grad=False)
+                logits2_source = []
+                for logit1 in logits1_source:
+                    logit2 = []
+                    for cluster in range(args.num_categories2):
+                        cluster_logits = logit1[mask[:,cluster]]
+                        min_cluster = torch.min(cluster_logits)
+                        logit2.append(min_cluster)
+                    logit2 = torch.stack([logit2[i] for i in range(len(logit2))])
+                    logits2_source.append(logit2)
+                logits2_source = torch.stack([logits2_source[i] for i in range(len(logits2_source))])                 
+
+            elif args.pred_method == 'minmax':
+                NotImplementedError
+
             _, preds2_source = torch.max(logits2_source, dim=1)
 
             # Forward pass for target data
-            logits1_target, logits2_target = model(images_target)
+            logits1_target = model(images_target)
             _, preds1_target = torch.max(logits1_target, dim=1)
+
+            if args.pred_method == 'mean':
+                mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+                logits2_target = torch.mm(logits1_target, mapping) / (1e-6 + torch.sum(mapping, dim=0)) 
+                    
+            elif args.pred_method == 'max':
+                mask = torch.tensor(tmp['data'], dtype=torch.bool, device=args.device, requires_grad=False)
+                logits2_target = []
+                for logit1 in logits1_target:
+                    logit2 = []
+                    for cluster in range(args.num_categories2):
+                        cluster_logits = logit1[mask[:,cluster]]
+                        max_cluster = torch.max(cluster_logits)
+                        logit2.append(max_cluster)
+                    logit2 = torch.stack([logit2[i] for i in range(len(logit2))])
+                    logits2_target.append(logit2)
+                logits2_target = torch.stack([logits2_target[i] for i in range(len(logits2_target))])              
+
+            elif args.pred_method == 'min':
+                mask = torch.tensor(tmp['data'], dtype=torch.bool, device=args.device, requires_grad=False)
+                logits2_target = []
+                for logit1 in logits1_target:
+                    logit2 = []
+                    for cluster in range(args.num_categories2):
+                        cluster_logits = logit1[mask[:,cluster]]
+                        min_cluster = torch.min(cluster_logits)
+                        logit2.append(min_cluster)
+                    logit2 = torch.stack([logit2[i] for i in range(len(logit2))])
+                    logits2_target.append(logit2)
+                logits2_target = torch.stack([logits2_target[i] for i in range(len(logits2_target))])            
+
+            elif args.pred_method == 'minmax':
+                NotImplementedError
+                
             _, preds2_target = torch.max(logits2_target, dim=1)
 
             # Losses
-            loss1_source = args.mu1 * criterion1(logits1_source, categories1_source)
+            loss1_source = args.mu1 * criterion1(logits1_source, categories1_source) 
             loss2_source = args.mu2 * criterion1(logits2_source, categories2_source)
             loss2_target = args.mu3 * criterion1(logits2_target, categories2_target)
             loss = loss1_source + loss2_source + loss2_target

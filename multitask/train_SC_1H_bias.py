@@ -12,8 +12,7 @@ import torchinfo
 import pytorch_warmup as warmup
 import wandb
 
-
-from datasets import dataset2 as dataset
+from datasets_biased import dataset2_biased as dataset
 from models import resnet50s_1head
 from losses import loss_ce, loss_op
 sys.path.append('..')
@@ -35,6 +34,9 @@ def parse_args():
     parser.add_argument('--bs', type=int, default=16)
     parser.add_argument('--num_epochs', type=int, default=40)
     parser.add_argument('--balance_mini_batches', default=False, action='store_true')
+
+    parser.add_argument('--prev_exp', type=str, required=True)
+    parser.add_argument('--prev_checkpoint', type=str, required=True)
 
     # Data
     parser.add_argument('--source_train', type=str, required=True)
@@ -75,8 +77,8 @@ def main():
     args = parse_args()
 
     # Update path to weights and runs
-    args.path_weights = os.path.join('..', '..','data', 'exps', 'models', args.exp)
-    
+    args.path_weights = os.path.join('..', '..','data', 'exps', 'biased_models', args.exp)
+    args.prev_weights = os.path.join('..', '..','data', 'exps', 'models', args.prev_exp)
     # Create experiment folder
     os.makedirs(args.path_weights, exist_ok=True)
 
@@ -208,6 +210,12 @@ def run_train(args, logger):
     else:
         raise NotImplementedError
 
+    
+
+    # Load checkpoint
+    checkpoint = torch.load(os.path.join(args.prev_weights, '{:s}.tar'.format(args.prev_checkpoint)))
+    model.load_state_dict(checkpoint['model_state_dict'])
+
     # Send the model to the device
     model = model.to(args.device)
     # logger.info('Model is on device: {}'.format(next(model.parameters()).device))
@@ -329,15 +337,13 @@ def run_train(args, logger):
         stats_train = do_epoch_train(loader_train_source, loader_train_target, model, criterion1, optimizer, scheduler_lr, scheduler_warmup, args)
         logger.info('TRN, Epoch: {:4d}, Loss: {:e}, OA1: {:.4f}, MCA1: {:.4f}, OA2: {:.4f}, MCA2: {:.4f}, Elapsed: {:.1f}s'.format(
             epoch, stats_train['loss'], stats_train['oa1'], stats_train['mca1'], stats_train['oa2'], stats_train['mca2'], time.time() - since))
-        # logger.info('TRN, Epoch: {:4d}, Loss: {:e}, OA1: {:.4f}, MCA1: {:.4f}, Elapsed: {:.1f}s'.format(
-        #     epoch, stats_train['loss'], stats_train['oa1'], stats_train['mca1'], time.time() - since))
+
         # Validation
         since = time.time()
         stats_valid = do_epoch_valid(loader_valid_source, loader_valid_target, model, criterion1, args)
         logger.info('VAL, Epoch: {:4d}, Loss: {:e}, OA1: {:.4f}, MCA1: {:.4f}, OA2: {:.4f}, MCA2: {:.4f}, Elapsed: {:.1f}s'.format(
             epoch, stats_valid['loss'], stats_valid['oa1'], stats_valid['mca1'], stats_valid['oa2'], stats_valid['mca2'], time.time() - since))
-        # logger.info('VAL, Epoch: {:4d}, Loss: {:e}, OA1: {:.4f}, MCA1: {:.4f}, Elapsed: {:.1f}s'.format(
-        #     epoch, stats_valid['loss'], stats_valid['oa1'], stats_valid['mca1'], time.time() - since))
+
         # Update Wandb logger
         update_wandb(epoch, optimizer, stats_train, stats_valid)
 
@@ -373,20 +379,7 @@ def do_epoch_train(loader_train_source, loader_train_target, model, criterion1, 
     running_oa1, running_mca1_num, running_mca1_den = list(), list(), list()
     running_oa2, running_mca2_num, running_mca2_den = list(), list(), list()
 
-    # Loop over training mini-batches
-
-    # Loop on the shorter dataloader
-    # for i, (data_source, data_target) in enumerate(zip(loader_train_source, loader_train_target)):
-
-    # Loop on the longer dataloader. Out-of-memory when using the real split
-    # i = 0
-    # max_iters = max(len(loader_train_source), len(loader_train_target))
-    # for data_source, data_target in zip(cycle(loader_train_source), cycle(loader_train_target)):
-    #     i += 1
-    #     if i == max_iters + 1:
-    #         break
-
-    # Loop on source dataloader. Source: https://stackoverflow.com/questions/51444059/how-to-iterate-over-two-dataloaders-simultaneously-using-pytorch
+    # Loop on source dataloader
     dataloader_iterator = iter(loader_train_target)
     for i, data_source in enumerate(loader_train_source):
         try:
@@ -414,7 +407,7 @@ def do_epoch_train(loader_train_source, loader_train_target, model, criterion1, 
         logits1_source = model(images_source)
         _, preds1_source = torch.max(logits1_source, dim=1)
 
-        tmp = np.load('mapping.npz')
+        tmp = np.load('biased_mapping.npz')
         mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
         logits2_source = torch.mm(logits1_source, mapping) / (1e-6 + torch.sum(mapping, dim=0))
         _, preds2_source = torch.max(logits2_source, dim=1)
@@ -423,7 +416,7 @@ def do_epoch_train(loader_train_source, loader_train_target, model, criterion1, 
         logits1_target = model(images_target)
         _, preds1_target = torch.max(logits1_target, dim=1)
 
-        tmp = np.load('mapping.npz')
+        tmp = np.load('biased_mapping.npz')
         mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
         logits2_target = torch.mm(logits1_target, mapping) / (1e-6 + torch.sum(mapping, dim=0))
         _, preds2_target = torch.max(logits2_target, dim=1)
@@ -525,7 +518,7 @@ def do_epoch_valid(loader_valid_source, loader_valid_target, model, criterion1, 
             logits1_source = model(images_source)
             _, preds1_source = torch.max(logits1_source, dim=1)
 
-            tmp = np.load('mapping.npz')
+            tmp = np.load('biased_mapping.npz')
             mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
             logits2_source = torch.mm(logits1_source, mapping) / (1e-6 + torch.sum(mapping, dim=0))
             _, preds2_source = torch.max(logits2_source, dim=1)
@@ -534,7 +527,7 @@ def do_epoch_valid(loader_valid_source, loader_valid_target, model, criterion1, 
             logits1_target = model(images_target)
             _, preds1_target = torch.max(logits1_target, dim=1)
 
-            tmp = np.load('mapping.npz')
+            tmp = np.load('biased_mapping.npz')
             mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
             logits2_target = torch.mm(logits1_target, mapping) / (1e-6 + torch.sum(mapping, dim=0))
             _, preds2_target = torch.max(logits2_target, dim=1)

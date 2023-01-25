@@ -145,7 +145,7 @@ def run_test(args, logger, checkpoint):
         with torch.inference_mode():
 
             # Forward pass
-            logits1 = model(images)
+            features, logits1 = model(images)
             _, preds1 = torch.max(logits1, dim=1)
             predictions_1.extend(preds1.tolist())
 

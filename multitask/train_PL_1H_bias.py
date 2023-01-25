@@ -10,9 +10,11 @@ import torch
 import torchvision
 import torchinfo
 import pytorch_warmup as warmup
+import torch.nn.functional as F
 import wandb
 
-from datasets import dataset2 as dataset
+from datasets_biased import dataset2_biased as dataset
+from datasets_biased import BiasedPseudoLabelDataset
 from models import resnet50s_1head
 from losses import loss_ce, loss_op
 sys.path.append('..')
@@ -29,7 +31,13 @@ def parse_args():
     parser.add_argument('--num_workers', type=int, default=0)
     parser.add_argument('--seed', type=int, default=None)
     parser.add_argument('--freq_saving', type=int, default=10)
-
+    
+    # Pseudo
+    parser.add_argument('--source_exp', type=str, required=True)
+    parser.add_argument('--pseudo_domain', type=str, required=True)
+    parser.add_argument('--checkpoint', type=str, required=True)
+    parser.add_argument('--condition', type=str, required=True)
+    
     # Train
     parser.add_argument('--bs', type=int, default=16)
     parser.add_argument('--num_epochs', type=int, default=40)
@@ -38,7 +46,6 @@ def parse_args():
     # Data
     parser.add_argument('--source_train', type=str, required=True)
     parser.add_argument('--source_test', type=str, required=True)
-    parser.add_argument('--target_train', type=str, required=True)
     parser.add_argument('--target_test', type=str, required=True)
 
     # Model
@@ -57,27 +64,28 @@ def parse_args():
     parser.add_argument('--step', type=int, default=None)
     parser.add_argument('--gamma', type=float, default=None)
     parser.add_argument('--use_warmup', default=False, action='store_true')
-    parser.add_argument('--pred_method', type=str, default='max')
-    
 
     # Loss
     parser.add_argument('--reduction', type=str, default='mean')
-    parser.add_argument('--mu1', type=float, default=0.33)
-    parser.add_argument('--mu2', type=float, default=0.33)
-    parser.add_argument('--mu3', type=float, default=0.33)
+    parser.add_argument('--mu1', type=float, default=0.25)
+    parser.add_argument('--mu2', type=float, default=0.25)
+    parser.add_argument('--mu3', type=float, default=0.25)
+    parser.add_argument('--mu4', type=float, default=0.25)
+    parser.add_argument('--dropout_rate', type=float, default=0.7)
 
     args = parser.parse_args()
     return args
 
 
 def main():
-    
 
     # Parse input arguments
     args = parse_args()
+    
 
     # Update path to weights and runs
-    args.path_weights = os.path.join('..', '..','data', 'exps', 'models', args.exp)
+    args.path_weights = os.path.join('..', '..','data', 'exps', 'biased_models', args.exp)
+    args.path_pseudo = os.path.join('..','..','data', 'exps', 'pseudo_labels', args.source_exp)
     
     # Create experiment folder
     os.makedirs(args.path_weights, exist_ok=True)
@@ -87,12 +95,12 @@ def main():
 
     # # Create Wandb logger
     wandb.init(dir='../',
-      project='Sketch_1H', 
+      project='Train_PL_1H', 
       name=args.exp,
       config = {"model_type": args.model_type,
                 "source_train": args.source_train,
                 "source_test": args.source_test,
-                "target_train": args.target_train,
+                "pseudo_domain": args.pseudo_domain,
                 "target_test": args.target_test,
                 "epochs": args.num_epochs,
                 "batch_size": args.bs,
@@ -102,6 +110,8 @@ def main():
                 "mu1": args.mu1,
                 "mu2": args.mu2,
                 "mu3": args.mu3,
+                "mu4": args.mu4,
+                "dropout":args.dropout_rate,
                 })
 
     # Log library versions
@@ -133,6 +143,7 @@ def main():
 
 
 def run_train(args, logger):
+    
 
     # Get the source datasets
     dataset_train_source = dataset(
@@ -142,18 +153,20 @@ def run_train(args, logger):
         domain_type=args.source_test,
         augm_type='test')
 
-    # Get the target datasets
-    dataset_train_target = dataset(
-        domain_type=args.target_train,
-        augm_type='train')
+    # Get the target dataset
+    pseudo_target_tensors = torch.load(os.path.join(args.path_pseudo,'{}_{}_{}.tar'.format(args.pseudo_domain, args.checkpoint, args.condition)))
+    PL_file_array = pseudo_target_tensors['images_file_array']
+
+    dataset_train_target = BiasedPseudoLabelDataset(PL_file_array, augm_type='test') 
     dataset_valid_target = dataset(
         domain_type=args.target_test,
         augm_type='test')
 
+
     # Log stats
     logger.info('Source samples, Training: {:d}, Validation: {:d}'.format(
         len(dataset_train_source), len(dataset_valid_source)))
-    logger.info('Target samples, Training: {:d}, Validation: {:d}'.format(
+    logger.info('Target samples, Training (Pseudo-Labels): {:d}, Validation: {:d}'.format(
         len(dataset_train_target), len(dataset_valid_target)))
 
     # Get the source dataloaders
@@ -211,8 +224,9 @@ def run_train(args, logger):
         raise NotImplementedError
 
     # Send the model to the device
+    # checkpoint = torch.load(os.path.join('..','..','data', 'exps', 'weights', args.source_exp, '{}.tar'.format(args.checkpoint)))
+    # model.load_state_dict(checkpoint['model_state_dict']) 
     model = model.to(args.device)
-    # logger.info('Model is on device: {}'.format(next(model.parameters()).device))
 
     # Set data parallelism
     if torch.cuda.device_count() == 1:
@@ -224,36 +238,9 @@ def run_train(args, logger):
     # Set the model in training mode
     model.train()
 
-    # # Get the model summary
-    # if torch.cuda.device_count() == 1:
-    #     logger.info('Model summary:')
-    #     stats = torchinfo.summary(model, (args.bs, 3, 128, 128))
-    #     logger.info(str(stats))
-
-    # TODO Get the learnable parameters and log them
-    # logger.info('Learnable parameters:')
-    # if hasattr(model, 'module'):
-    #     params_to_update = model.module.parameters()
-    #     for name, param in model.module.named_parameters():
-    #         if param.requires_grad is True:
-    #             logger.info(name)
-    # else:
-    #     params_to_update = model.parameters()
-    #     for name, param in model.named_parameters():
-    #         if param.requires_grad is True:
-    #             logger.info(name)
-
     head = ['head.weight', 'head.bias']
     params_head = list(filter(lambda kv: kv[0] in head, model.named_parameters()))
     params_back = list(filter(lambda kv: kv[0] not in head, model.named_parameters()))
-    # logger.info('Learnable backbone parameters:')
-    # for name, param in params_back:
-    #     if param.requires_grad is True:
-    #         logger.info(name)
-    # logger.info('Learnable head parameters:')
-    # for name, param in params_head:
-    #     if param.requires_grad is True:
-    #         logger.info(name)
 
     # Get the optimizer
     if args.optim_type == 'SGD':
@@ -369,7 +356,7 @@ def do_epoch_train(loader_train_source, loader_train_target, model, criterion1, 
     model = model.train()
 
     # Init stats
-    running_loss, running_loss1_source, running_loss2_source, running_loss2_target = list(), list(), list(), list()
+    running_loss, running_loss1_source, running_loss2_source, running_loss1_target, running_loss2_target = list(), list(), list(), list(), list()
     running_oa1, running_mca1_num, running_mca1_den = list(), list(), list()
     running_oa2, running_mca2_num, running_mca2_den = list(), list(), list()
 
@@ -401,91 +388,34 @@ def do_epoch_train(loader_train_source, loader_train_target, model, criterion1, 
         logits1_source = model(images_source)
         _, preds1_source = torch.max(logits1_source, dim=1)
 
-        tmp = np.load('mapping.npz', allow_pickle=True)
-        if args.pred_method == 'mean':
-            mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
-            logits2_source = torch.mm(logits1_source, mapping) / (1e-6 + torch.sum(mapping, dim=0)) 
-            
-        elif args.pred_method == 'max':
-            mask = torch.tensor(tmp['data'], dtype=torch.bool, device=args.device, requires_grad=False)
-            logits2_source = []
-            for logit1 in logits1_source:
-                logit2 = []
-                for cluster in range(args.num_categories2):
-                    cluster_logits = logit1[mask[:,cluster]]
-                    max_cluster = torch.max(cluster_logits)
-                    logit2.append(max_cluster)
-                logit2 = torch.stack([logit2[i] for i in range(len(logit2))])
-                logits2_source.append(logit2)
-            logits2_source = torch.stack([logits2_source[i] for i in range(len(logits2_source))])            
-
-        elif args.pred_method == 'min':
-            mask = torch.tensor(tmp['data'], dtype=torch.bool, device=args.device, requires_grad=False)
-            logits2_source = []
-            for logit1 in logits1_source:
-                logit2 = []
-                for cluster in range(args.num_categories2):
-                    cluster_logits = logit1[mask[:,cluster]]
-                    min_cluster = torch.min(cluster_logits)
-                    logit2.append(min_cluster)
-                logit2 = torch.stack([logit2[i] for i in range(len(logit2))])
-                logits2_source.append(logit2)
-            logits2_source = torch.stack([logits2_source[i] for i in range(len(logits2_source))])                
-
-        elif args.pred_method == 'minmax':
-            NotImplementedError
-        
+        tmp = np.load('mapping.npz')
+        mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+        logits2_source = torch.mm(logits1_source, mapping) / (1e-6 + torch.sum(mapping, dim=0))
         _, preds2_source = torch.max(logits2_source, dim=1)
 
-        # Forward pass for target data
+        # Forward pass for target data 
         logits1_target = model(images_target)
         _, preds1_target = torch.max(logits1_target, dim=1)
         
-        if args.pred_method == 'mean':
-            mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
-            logger.info('mean logit2 {}'.format(logits1_target[0][0]))
-            logger.info('logit1 sample {}'.format(logits1_target[0][0].grad_fn))
-            logits2_target = torch.mm(logits1_target, mapping) / (1e-6 + torch.sum(mapping, dim=0)) 
-            logger.info('mean logit2 {}'.format(logits2_target[0][0]))
-            logger.info('mean logit2 {}'.format(logits2_target[0][0].grad_fn))
-            sys.exit()
-            
-        elif args.pred_method == 'max':
-            mask = torch.tensor(tmp['data'], dtype=torch.bool, device=args.device, requires_grad=False)
-            logits2_target = []
-            for logit1 in logits1_target:
-                logit2 = []
-                for cluster in range(args.num_categories2):
-                    cluster_logits = logit1[mask[:,cluster]]
-                    max_cluster = torch.max(cluster_logits)
-                    logit2.append(max_cluster)
-                logit2 = torch.stack([logit2[i] for i in range(len(logit2))])
-                logits2_target.append(logit2)
-            logits2_target = torch.stack([logits2_target[i] for i in range(len(logits2_target))])              
-
-        elif args.pred_method == 'min':
-            mask = torch.tensor(tmp['data'], dtype=torch.bool, device=args.device, requires_grad=False)
-            logits2_target = []
-            for logit1 in logits1_target:
-                logit2 = []
-                for cluster in range(args.num_categories2):
-                    cluster_logits = logit1[mask[:,cluster]]
-                    min_cluster = torch.min(cluster_logits)
-                    logit2.append(min_cluster)
-                logit2 = torch.stack([logit2[i] for i in range(len(logit2))])
-                logits2_target.append(logit2)
-            logits2_target = torch.stack([logits2_target[i] for i in range(len(logits2_target))])
-            
-        elif args.pred_method == 'minmax':
-            NotImplementedError
-            
+        tmp = np.load('mapping.npz')
+        mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+        logits2_target = torch.mm(logits1_target, mapping) / (1e-6 + torch.sum(mapping, dim=0))
         _, preds2_target = torch.max(logits2_target, dim=1)
+        
+        # Dropout Some Pseudo Labels
+        mask = torch.rand(logits1_target.shape[0]) < args.dropout_rate
+        logits1_dropped = logits1_target[mask]
+        logits2_dropped = logits2_target[mask]
+        targets1_dropped = categories1_target[mask]
+        targets2_dropped = categories2_target[mask]
 
         # Losses
-        loss1_source = args.mu1 * criterion1(logits1_source, categories1_source)  
+        loss1_source = args.mu1 * criterion1(logits1_source, categories1_source)
         loss2_source = args.mu2 * criterion1(logits2_source, categories2_source)
-        loss2_target = args.mu3 * criterion1(logits2_target, categories2_target)
-        loss = loss1_source + loss2_source + loss2_target
+        loss1_target = args.mu3 * criterion1(logits1_dropped, targets1_dropped)
+        loss2_target = args.mu4 * criterion1(logits2_dropped, targets2_dropped)
+        loss = loss1_source + loss2_source + loss1_target + loss2_target
+        # logger.info('loss {}'.format(loss))
 
         # Back-propagation
         loss.backward()
@@ -504,6 +434,7 @@ def do_epoch_train(loader_train_source, loader_train_target, model, criterion1, 
         running_loss.append(loss.item())
         running_loss1_source.append(loss1_source.item())
         running_loss2_source.append(loss2_source.item())
+        running_loss1_target.append(loss1_target.item())
         running_loss2_target.append(loss2_target.item())
 
         # Update metrics
@@ -537,6 +468,7 @@ def do_epoch_train(loader_train_source, loader_train_target, model, criterion1, 
         'loss': np.mean(running_loss),
         'loss1_source': np.mean(running_loss1_source),
         'loss2_source': np.mean(running_loss2_source),
+        'loss1_target': np.mean(running_loss1_target),
         'loss2_target': np.mean(running_loss2_target),
         'oa1': np.mean(running_oa1),
         'mca1': np.mean(mca1_num/mca1_den),
@@ -553,7 +485,7 @@ def do_epoch_valid(loader_valid_source, loader_valid_target, model, criterion1, 
     model = model.eval()
 
     # Init stats
-    running_loss, running_loss1_source, running_loss2_source, running_loss2_target = list(), list(), list(), list()
+    running_loss, running_loss1_source, running_loss2_source, running_loss1_target, running_loss2_target = list(), list(), list(), list(), list()
     running_oa1, running_mca1_num, running_mca1_den = list(), list(), list()
     running_oa2, running_mca2_num, running_mca2_den = list(), list(), list()
 
@@ -578,91 +510,39 @@ def do_epoch_valid(loader_valid_source, loader_valid_target, model, criterion1, 
             logits1_source = model(images_source)
             _, preds1_source = torch.max(logits1_source, dim=1)
 
-            tmp = np.load('mapping.npz', allow_pickle=True)
-            if args.pred_method == 'mean':
-                mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
-                logits2_source = torch.mm(logits1_source, mapping) / (1e-6 + torch.sum(mapping, dim=0)) 
-                
-            elif args.pred_method == 'max':
-                mask = torch.tensor(tmp['data'], dtype=torch.bool, device=args.device, requires_grad=False)
-                logits2_source = []
-                for logit1 in logits1_source:
-                    logit2 = []
-                    for cluster in range(args.num_categories2):
-                        cluster_logits = logit1[mask[:,cluster]]
-                        max_cluster = torch.max(cluster_logits)
-                        logit2.append(max_cluster)
-                    logit2 = torch.stack([logit2[i] for i in range(len(logit2))])
-                    logits2_source.append(logit2)
-                logits2_source = torch.stack([logits2_source[i] for i in range(len(logits2_source))])            
-
-            elif args.pred_method == 'min':
-                mask = torch.tensor(tmp['data'], dtype=torch.bool, device=args.device, requires_grad=False)
-                logits2_source = []
-                for logit1 in logits1_source:
-                    logit2 = []
-                    for cluster in range(args.num_categories2):
-                        cluster_logits = logit1[mask[:,cluster]]
-                        min_cluster = torch.min(cluster_logits)
-                        logit2.append(min_cluster)
-                    logit2 = torch.stack([logit2[i] for i in range(len(logit2))])
-                    logits2_source.append(logit2)
-                logits2_source = torch.stack([logits2_source[i] for i in range(len(logits2_source))])                 
-
-            elif args.pred_method == 'minmax':
-                NotImplementedError
-
+            tmp = np.load('mapping.npz')
+            mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+            logits2_source = torch.mm(logits1_source, mapping) / (1e-6 + torch.sum(mapping, dim=0))
             _, preds2_source = torch.max(logits2_source, dim=1)
 
             # Forward pass for target data
             logits1_target = model(images_target)
             _, preds1_target = torch.max(logits1_target, dim=1)
 
-            if args.pred_method == 'mean':
-                mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
-                logits2_target = torch.mm(logits1_target, mapping) / (1e-6 + torch.sum(mapping, dim=0)) 
-                    
-            elif args.pred_method == 'max':
-                mask = torch.tensor(tmp['data'], dtype=torch.bool, device=args.device, requires_grad=False)
-                logits2_target = []
-                for logit1 in logits1_target:
-                    logit2 = []
-                    for cluster in range(args.num_categories2):
-                        cluster_logits = logit1[mask[:,cluster]]
-                        max_cluster = torch.max(cluster_logits)
-                        logit2.append(max_cluster)
-                    logit2 = torch.stack([logit2[i] for i in range(len(logit2))])
-                    logits2_target.append(logit2)
-                logits2_target = torch.stack([logits2_target[i] for i in range(len(logits2_target))])              
-
-            elif args.pred_method == 'min':
-                mask = torch.tensor(tmp['data'], dtype=torch.bool, device=args.device, requires_grad=False)
-                logits2_target = []
-                for logit1 in logits1_target:
-                    logit2 = []
-                    for cluster in range(args.num_categories2):
-                        cluster_logits = logit1[mask[:,cluster]]
-                        min_cluster = torch.min(cluster_logits)
-                        logit2.append(min_cluster)
-                    logit2 = torch.stack([logit2[i] for i in range(len(logit2))])
-                    logits2_target.append(logit2)
-                logits2_target = torch.stack([logits2_target[i] for i in range(len(logits2_target))])            
-
-            elif args.pred_method == 'minmax':
-                NotImplementedError
-                
+            tmp = np.load('mapping.npz')
+            mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+            logits2_target = torch.mm(logits1_target, mapping) / (1e-6 + torch.sum(mapping, dim=0))
             _, preds2_target = torch.max(logits2_target, dim=1)
 
+            # Dropout Some Pseudo Labels
+            mask = torch.rand(logits1_target.shape[0]) < args.dropout_rate
+            logits1_dropped = logits1_target[mask]
+            logits2_dropped = logits2_target[mask]
+            targets1_dropped = categories1_target[mask]
+            targets2_dropped = categories2_target[mask]
+
             # Losses
-            loss1_source = args.mu1 * criterion1(logits1_source, categories1_source) 
+            loss1_source = args.mu1 * criterion1(logits1_source, categories1_source)
             loss2_source = args.mu2 * criterion1(logits2_source, categories2_source)
-            loss2_target = args.mu3 * criterion1(logits2_target, categories2_target)
-            loss = loss1_source + loss2_source + loss2_target
+            loss1_target = args.mu3 * criterion1(logits1_dropped, targets1_dropped)
+            loss2_target = args.mu4 * criterion1(logits2_dropped, targets2_dropped)
+            loss = loss1_source + loss2_source + loss1_target + loss2_target
 
         # Update losses
         running_loss.append(loss.item())
         running_loss1_source.append(loss1_source.item())
         running_loss2_source.append(loss2_source.item())
+        running_loss1_target.append(loss1_target.item())
         running_loss2_target.append(loss2_target.item())
 
         # Update metrics
@@ -695,6 +575,7 @@ def do_epoch_valid(loader_valid_source, loader_valid_target, model, criterion1, 
         'loss': np.mean(running_loss),
         'loss1_source': np.mean(running_loss1_source),
         'loss2_source': np.mean(running_loss2_source),
+        'loss1_target': np.mean(running_loss1_target),
         'loss2_target': np.mean(running_loss2_target),
         'oa1': np.mean(running_oa1),
         'mca1': np.mean(mca1_num/mca1_den),
@@ -715,6 +596,7 @@ def update_wandb(epoch, optimizer, stats_train, stats_valid):
         "train/loss": stats_train['loss'].item(),
         "train/loss1_source": stats_train['loss1_source'].item(),
         "train/loss2_source": stats_train['loss2_source'].item(),
+        "train/loss1_target": stats_train['loss1_target'].item(),
         "train/loss2_target": stats_train['loss2_target'].item(),
         "train/oa1": stats_train['oa1'].item(),
         "train/mca1": stats_train['mca1'].item(),
@@ -724,6 +606,7 @@ def update_wandb(epoch, optimizer, stats_train, stats_valid):
         "valid/loss": stats_valid['loss'].item(),
         "valid/loss1_source": stats_valid['loss1_source'].item(),
         "valid/loss2_source": stats_valid['loss2_source'].item(),
+        "valid/loss1_target": stats_valid['loss1_target'].item(),
         "valid/loss2_target": stats_valid['loss2_target'].item(),
         "valid/oa1": stats_valid['oa1'].item(),
         "valid/mca1": stats_valid['mca1'].item(),

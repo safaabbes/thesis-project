@@ -10,6 +10,7 @@ import torch
 import torchvision
 import torchinfo
 import pytorch_warmup as warmup
+
 import wandb
 
 from datasets import dataset2 as dataset
@@ -32,7 +33,7 @@ def parse_args():
 
     # Train
     parser.add_argument('--bs', type=int, default=16)
-    parser.add_argument('--num_epochs', type=int, default=40)
+    parser.add_argument('--num_epochs', type=int, default=60)
     parser.add_argument('--balance_mini_batches', default=False, action='store_true')
 
     # Data
@@ -58,8 +59,9 @@ def parse_args():
 
     # Loss
     parser.add_argument('--reduction', type=str, default='mean')
-    parser.add_argument('--mu1', type=float, default=0.5)
-    parser.add_argument('--mu2', type=float, default=0.5)
+    parser.add_argument('--mu1', type=float, default=0.33)
+    parser.add_argument('--mu2', type=float, default=0.33)
+    parser.add_argument('--nu', type=float, default=0.33)
 
     args = parser.parse_args()
     return args
@@ -287,6 +289,9 @@ def run_train(args, logger):
     # Get losses and send them to the device
     criterion1 = loss_ce(reduction=args.reduction)
     criterion1 = criterion1.to(args.device)
+    
+    criterion2 = loss_op()
+    criterion2 = criterion2.to(args.device)
 
     # Loop over epochs
     start = time.time()
@@ -294,10 +299,19 @@ def run_train(args, logger):
 
         # Training
         since = time.time()
-        stats_train = do_epoch_train(loader_train_source, model, criterion1, optimizer, scheduler_lr, scheduler_warmup, args)
-        logger.info('TRN, Epoch: {:4d}, Loss: {:e}, OA1: {:.4f}, MCA1: {:.4f}, OA2: {:.4f}, MCA2: {:.4f}, Elapsed: {:.1f}s'.format(
-            epoch, stats_train['loss'], stats_train['oa1'], stats_train['mca1'], stats_train['oa2'], stats_train['mca2'], time.time() - since))
+        
+        if epoch < 30:
+            stats_train = do_epoch_train(loader_train_source, model, criterion1, optimizer, scheduler_lr, scheduler_warmup, args)
+            logger.info('TRN, Epoch: {:4d}, Loss: {:e}, OA1: {:.4f}, MCA1: {:.4f}, OA2: {:.4f}, MCA2: {:.4f}, Elapsed: {:.1f}s'.format(
+                epoch, stats_train['loss'], stats_train['oa1'], stats_train['mca1'], stats_train['oa2'], stats_train['mca2'], time.time() - since))
 
+        if epoch >= 30:
+            logger.info('Training with Orthogonal Projection Loss')
+            stats_train = do_epoch_train_op(loader_train_source, model, criterion1, criterion2, optimizer, scheduler_lr, scheduler_warmup, args)
+            logger.info('TRN, Epoch: {:4d}, Loss: {:e}, OA1: {:.4f}, MCA1: {:.4f}, OA2: {:.4f}, MCA2: {:.4f}, Elapsed: {:.1f}s'.format(
+                epoch, stats_train['loss'], stats_train['oa1'], stats_train['mca1'], stats_train['oa2'], stats_train['mca2'], time.time() - since))
+            
+        
         # Validation
         since = time.time()
         stats_valid = do_epoch_valid(loader_valid_source, model, criterion1, args)
@@ -329,6 +343,100 @@ def run_train(args, logger):
     logger.info('Elapsed time: {:.2f} minutes'.format((end - start)/60))
 
 
+def do_epoch_train_op(loader_train_source, model, criterion1, criterion2, optimizer, scheduler_lr, scheduler_warmup, args):
+
+    # Set the model in training mode
+    model = model.train()
+
+    # Init stats
+    running_loss, running_loss1_source, running_loss2_source = list(), list(), list()
+    running_oa1, running_mca1_num, running_mca1_den = list(), list(), list()
+    running_oa2, running_mca2_num, running_mca2_den = list(), list(), list()
+
+    # Loop on source dataloader. Source: https://stackoverflow.com/questions/51444059/how-to-iterate-over-two-dataloaders-simultaneously-using-pytorch
+    for i, data_source in enumerate(loader_train_source):
+
+        # Load source mini-batch
+        images_source, categories1_source, categories2_source = data_source
+        images_source = images_source.to(args.device, non_blocking=True)
+        categories1_source = categories1_source.to(args.device, non_blocking=True)
+        categories2_source = categories2_source.to(args.device, non_blocking=True)
+
+        # Zero the parameters gradients
+        optimizer.zero_grad()
+
+        # Forward pass for source data
+        features, logits1_source = model(images_source)
+        _, preds1_source = torch.max(logits1_source, dim=1)
+
+        tmp = np.load('mapping.npz')
+        mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+        logits2_source = torch.mm(logits1_source, mapping) / (1e-6 + torch.sum(mapping, dim=0))
+        _, preds2_source = torch.max(logits2_source, dim=1)
+
+        # Losses
+        loss1_source = args.mu1 * criterion1(logits1_source, categories1_source)
+        loss2_source = args.mu2 * criterion1(logits2_source, categories2_source)
+        op_loss_source = args.nu * criterion2(features, categories1_source)
+        loss = loss1_source + loss2_source + op_loss_source
+
+        # Back-propagation
+        loss.backward()
+
+        # Optimizer step
+        optimizer.step()
+
+        # Scheduler step
+        if args.use_warmup:
+            with scheduler_warmup.dampening():
+                scheduler_lr.step()
+        else:
+            scheduler_lr.step()
+
+        # Update losses
+        running_loss.append(loss.item())
+        running_loss1_source.append(loss1_source.item())
+        running_loss2_source.append(loss2_source.item())
+
+        # Update metrics
+        oa1 = torch.sum(preds1_source == categories1_source.squeeze()) / len(categories1_source)
+        running_oa1.append(oa1.item())
+        mca1_num = torch.sum(
+            torch.nn.functional.one_hot(preds1_source, num_classes=args.num_categories1) * \
+            torch.nn.functional.one_hot(categories1_source, num_classes=args.num_categories1), dim=0)
+        mca1_den = torch.sum(
+            torch.nn.functional.one_hot(categories1_source, num_classes=args.num_categories1), dim=0)
+        running_mca1_num.append(mca1_num.detach().cpu().numpy())
+        running_mca1_den.append(mca1_den.detach().cpu().numpy())
+
+        oa2 = torch.sum(preds2_source == categories2_source.squeeze()) / len(categories2_source)
+        running_oa2.append(oa2.item())
+        mca2_num = torch.sum(
+            torch.nn.functional.one_hot(preds2_source, num_classes=args.num_categories2) * \
+            torch.nn.functional.one_hot(categories2_source, num_classes=args.num_categories2), dim=0)
+        mca2_den = torch.sum(
+            torch.nn.functional.one_hot(categories2_source, num_classes=args.num_categories2), dim=0)
+        running_mca2_num.append(mca2_num.detach().cpu().numpy())
+        running_mca2_den.append(mca2_den.detach().cpu().numpy())
+
+    # Update MCA metric
+    mca1_num = np.sum(running_mca1_num, axis=0)
+    mca1_den = 1e-16 + np.sum(running_mca1_den, axis=0)
+    mca2_num = np.sum(running_mca2_num, axis=0)
+    mca2_den = 1e-16 + np.sum(running_mca2_den, axis=0)
+
+    stats = {
+        'loss': np.mean(running_loss),
+        'loss1_source': np.mean(running_loss1_source),
+        'loss2_source': np.mean(running_loss2_source),
+        'oa1': np.mean(running_oa1),
+        'mca1': np.mean(mca1_num/mca1_den),
+        'oa2': np.mean(running_oa2),
+        'mca2': np.mean(mca2_num/mca2_den)
+        }
+
+    return stats
+
 def do_epoch_train(loader_train_source, model, criterion1, optimizer, scheduler_lr, scheduler_warmup, args):
 
     # Set the model in training mode
@@ -352,7 +460,7 @@ def do_epoch_train(loader_train_source, model, criterion1, optimizer, scheduler_
         optimizer.zero_grad()
 
         # Forward pass for source data
-        logits1_source = model(images_source)
+        features, logits1_source = model(images_source)
         _, preds1_source = torch.max(logits1_source, dim=1)
 
         tmp = np.load('mapping.npz')
@@ -361,8 +469,8 @@ def do_epoch_train(loader_train_source, model, criterion1, optimizer, scheduler_
         _, preds2_source = torch.max(logits2_source, dim=1)
 
         # Losses
-        loss1_source = args.mu1 * criterion1(logits1_source, categories1_source)
-        loss2_source = args.mu2 * criterion1(logits2_source, categories2_source)
+        loss1_source = 0.5 * criterion1(logits1_source, categories1_source)
+        loss2_source = 0.5 * criterion1(logits2_source, categories2_source)
         loss = loss1_source + loss2_source 
 
         # Back-propagation
@@ -422,7 +530,6 @@ def do_epoch_train(loader_train_source, model, criterion1, optimizer, scheduler_
 
     return stats
 
-
 def do_epoch_valid(loader_valid_source, model, criterion1, args):
 
     # Set the model in evaluation mode
@@ -445,7 +552,7 @@ def do_epoch_valid(loader_valid_source, model, criterion1, args):
         with torch.inference_mode():
 
             # Forward pass for source data
-            logits1_source = model(images_source)
+            features, logits1_source = model(images_source)
             _, preds1_source = torch.max(logits1_source, dim=1)
 
             tmp = np.load('mapping.npz')

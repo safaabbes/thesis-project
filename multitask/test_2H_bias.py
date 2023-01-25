@@ -16,7 +16,7 @@ from pytorch_grad_cam.utils.image import show_cam_on_image, deprocess_image
 import cv2
 from PIL import Image, ImageDraw, ImageFont 
 
-from datasets import dataset2 as dataset
+from datasets_biased import dataset2_biased as dataset
 from models import resnet50s
 sys.path.append('..')
 from utils import get_logger, deprocess
@@ -50,7 +50,7 @@ def main():
     args_test = parse_args()
 
     # Update path to weights and runs
-    args_test.path_weights = os.path.join('..','..', 'data', 'exps', 'models', args_test.exp)
+    args_test.path_weights = os.path.join('..','..', 'data', 'exps', 'biased_models', args_test.exp)
 
     # Load checkpoint
     checkpoint = torch.load(os.path.join(args_test.path_weights, '{:s}.tar'.format(args_test.checkpoint)))
@@ -150,7 +150,6 @@ def run_test(args, logger, checkpoint):
             predictions_1.extend(preds1.tolist())
             _, preds2 = torch.max(logits2, dim=1)
             predictions_2.extend(preds2.tolist())
-            
 
         # Update metrics
         oa1 = torch.sum(preds1 == categories1.squeeze()) / len(categories1)
