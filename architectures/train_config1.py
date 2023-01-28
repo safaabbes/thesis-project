@@ -13,6 +13,7 @@ import torch
 import torchvision
 import torchinfo
 import pytorch_warmup as warmup
+import wandb
 
 from datasets import dataset_1 as dataset
 from models import resnet50_1head
@@ -182,6 +183,20 @@ def run_train(args, logger):
     criterion1 = loss_ce()
     criterion1 = criterion1.to(args.device)
 
+
+    # Create Wandb logger
+    wandb.init(
+        dir='../',
+        project='Configuration_1', 
+        name=args.exp,
+        config = {"source_train": args.source_train,
+                    "source_test": args.source_test,
+                    "epochs": args.num_epochs,
+                    "batch_size": args.bs,
+                    "balance": args.balance_mini_batches,
+                    "lr": args.lr,
+                    })
+
     # Loop over epochs
     start = time.time()
     for epoch in range(1, args.num_epochs + 1):
@@ -198,6 +213,9 @@ def run_train(args, logger):
         logger.info('VAL, Epoch: {:4d}, Loss: {:e}, OA1: {:.4f}, MCA1: {:.4f}, Elapsed: {:.1f}s'.format(
             epoch, stats_valid['loss'], stats_valid['oa1'], stats_valid['mca1'], time.time() - since))
 
+        # Update wandb
+        update_wandb(epoch, optimizer, stats_train, stats_valid)
+
         # Save current checkpoint
         if epoch % args.freq_saving == 0:
             torch.save({
@@ -212,8 +230,9 @@ def run_train(args, logger):
         'args': args,
         'model_state_dict': model.module.state_dict() if hasattr(model, 'module') else model.state_dict()},
         os.path.join(args.path_weights, 'last.tar'))
-
+    
     end = time.time()
+    wandb.finish()
     logger.info('Elapsed time: {:.2f} minutes'.format((end - start)/60))
 
 
@@ -326,6 +345,24 @@ def do_epoch_valid(loader_valid_source, model, criterion1, args):
         }
 
     return stats
+
+
+def update_wandb(epoch, optimizer, stats_train, stats_valid):
+
+    wandb.log({
+        "epoch": epoch,
+        "train/lr backbone": optimizer.param_groups[0]['lr'],
+        "train/lr head": optimizer.param_groups[1]['lr'],
+        # Train Stats
+        "train/loss": stats_train['loss'].item(),
+        "train/oa1": stats_train['oa1'].item(),
+        "train/mca1": stats_train['mca1'].item(),
+        # Valid Stats
+        "valid/loss": stats_valid['loss'].item(),
+        "valid/oa1": stats_valid['oa1'].item(),
+        "valid/mca1": stats_valid['mca1'].item(),
+    })
+
 
 if __name__ == '__main__':
     main()

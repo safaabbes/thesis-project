@@ -14,6 +14,7 @@ import torch
 import torchvision
 import torchinfo
 import pytorch_warmup as warmup
+import wandb
 
 from datasets import dataset_3 as dataset
 from models import resnet50_1head
@@ -188,6 +189,18 @@ def run_train(args, logger):
     criterion1 = loss_ce()
     criterion1 = criterion1.to(args.device)
 
+    # Create Wandb logger
+    wandb.init(
+      project='Configuration_3B', 
+      name=args.exp,
+      config = {"source_train": args.source_train,
+                "source_test": args.source_test,
+                "epochs": args.num_epochs,
+                "batch_size": args.bs,
+                "balance": args.balance_mini_batches,
+                "lr": args.lr,
+                })
+
     # Loop over epochs
     start = time.time()
     for epoch in range(1, args.num_epochs + 1):
@@ -203,6 +216,9 @@ def run_train(args, logger):
         stats_valid = do_epoch_valid(loader_valid_source, model, criterion1, args)
         logger.info('VAL, Epoch: {:4d}, Loss: {:e}, OA1: {:.4f}, MCA1: {:.4f}, Elapsed: {:.1f}s'.format(
             epoch, stats_valid['loss'], stats_valid['oa1'], stats_valid['mca1'], time.time() - since))
+
+        # Update wandb
+        update_wandb(epoch, optimizer, stats_train, stats_valid)
 
         # Save current checkpoint
         if epoch % args.freq_saving == 0:
@@ -220,6 +236,7 @@ def run_train(args, logger):
         os.path.join(args.path_weights, 'last.tar'))
 
     end = time.time()
+    wandb.finish()
     logger.info('Elapsed time: {:.2f} minutes'.format((end - start)/60))
 
 
@@ -229,7 +246,7 @@ def do_epoch_train(loader_train_source, model, criterion1, optimizer, args, logg
     model = model.train()
 
     # Init stats
-    running_loss = list()
+    running_loss, running_source_loss1, running_source_loss2, running_source_loss3 = list(), list(), list(), list()
     running_oa1, running_mca1_num, running_mca1_den = list(), list(), list()
     running_oa2, running_mca2_num, running_mca2_den = list(), list(), list()
     running_oa3, running_mca3_num, running_mca3_den = list(), list(), list()
@@ -276,6 +293,9 @@ def do_epoch_train(loader_train_source, model, criterion1, optimizer, args, logg
 
         # Update losses
         running_loss.append(loss.item())
+        running_source_loss1.append(source_loss1.item())
+        running_source_loss2.append(source_loss2.item())
+        running_source_loss3.append(source_loss3.item())
 
         # Update metrics
         oa1 = torch.sum(preds1 == labels.squeeze()) / len(labels)
@@ -318,6 +338,9 @@ def do_epoch_train(loader_train_source, model, criterion1, optimizer, args, logg
 
     stats = {
         'loss': np.mean(running_loss),
+        'source_loss1': np.mean(running_source_loss1),
+        'source_loss2': np.mean(running_source_loss2),
+        'source_loss3': np.mean(running_source_loss3),
         'oa1': np.mean(running_oa1),
         'mca1': np.mean(mca1_num/mca1_den),
         'oa2': np.mean(running_oa2),
@@ -379,6 +402,31 @@ def do_epoch_valid(loader_valid_source, model, criterion1, args):
         }
 
     return stats
+
+
+def update_wandb(epoch, optimizer, stats_train, stats_valid):
+
+    wandb.log({
+        "epoch": epoch,
+        # "train/lr backbone": optimizer.param_groups[0]['lr'],
+        # "train/lr head": optimizer.param_groups[1]['lr'],
+        # Train Stats
+        "train/loss": stats_train['loss'].item(),
+        "train/source_loss1": stats_train['source_loss1'].item(),
+        "train/source_loss2": stats_train['source_loss2'].item(),
+        "train/source_loss3": stats_train['source_loss3'].item(),
+        "train/oa1": stats_train['oa1'].item(),
+        "train/mca1": stats_train['mca1'].item(),
+        "train/oa2": stats_train['oa2'].item(),
+        "train/mca2": stats_train['mca2'].item(),
+        "train/oa3": stats_train['oa3'].item(),
+        "train/mca3": stats_train['mca3'].item(),
+        # Valid Stats
+        "valid/loss": stats_valid['loss'].item(),
+        "valid/oa1": stats_valid['oa1'].item(),
+        "valid/mca1": stats_valid['mca1'].item(),
+    })
+
 
 if __name__ == '__main__':
     main()
