@@ -26,7 +26,7 @@ def parse_args():
 
     # General
     parser.add_argument('--exp', type=str, required=True)
-    parser.add_argument('--config', type=str, default='config3a')
+    parser.add_argument('--config', type=str, default='config3b')
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--num_workers', type=int, default=2)
     parser.add_argument('--seed', type=int, default=None)
