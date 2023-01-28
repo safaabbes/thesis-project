@@ -207,7 +207,8 @@ def run_train(args, logger):
         
         # Training
         since = time.time()
-        stats_train = do_epoch_train(loader_train_source, model, criterion1, optimizer, args, logger)
+        
+        stats_train = do_epoch_train(loader_train_source, model, criterion1, optimizer, args, logger, epoch)
         logger.info('TRN, Epoch: {:4d}, Loss: {:e}, OA1: {:.4f}, MCA1: {:.4f}, OA2: {:.4f}, MCA2: {:.4f}, Elapsed: {:.1f}s'.format(
             epoch, stats_train['loss'], stats_train['oa1'], stats_train['mca1'], stats_train['oa2'], stats_train['mca2'], time.time() - since))
         
@@ -240,7 +241,7 @@ def run_train(args, logger):
     logger.info('Elapsed time: {:.2f} minutes'.format((end - start)/60))
 
 
-def do_epoch_train(loader_train_source, model, criterion1, optimizer, args, logger):
+def do_epoch_train(loader_train_source, model, criterion1, optimizer, args, logger, epoch):
 
     # Set the model in training mode
     model = model.train()
@@ -278,10 +279,10 @@ def do_epoch_train(loader_train_source, model, criterion1, optimizer, args, logg
             cumulative_cluster_entropy_loss = []
             for cluster in range(13):
                 cluster_logits = logit[mask[:,cluster]]
-                # logger.info('cluster_logits: {}'.format(cluster_logits))
+                logger.info('cluster_logits: {}'.format(cluster_logits))
                 # Apply entropy loss for each cluster elements
                 entropy_loss = criterion1(cluster_logits, cluster_logits)
-                # logger.info('entropy_loss: {}'.format(entropy_loss))
+                logger.info('entropy_loss: {}'.format(entropy_loss))
                 cumulative_cluster_entropy_loss.append(entropy_loss)
                 cumulative_cluster_entropy_loss_tensor = torch.stack([cumulative_cluster_entropy_loss[i] for i in range(len(cumulative_cluster_entropy_loss))])
             # Average all entropy losses on one logit
@@ -291,8 +292,9 @@ def do_epoch_train(loader_train_source, model, criterion1, optimizer, args, logg
         # Average entropy losses of all logits
         total_entropy_loss = torch.sum(cumulative_logits_entropy_loss_tensor, axis=0) / len(cumulative_logits_entropy_loss_tensor)
         # logger.info('total_entropy_loss: {}'.format(total_entropy_loss))
+        # sys.exit()
         # IMPORTANT NOTE: THE TOTAL ENTROPY LOSS EXPLODE WHEN TRAINING 
-
+        
         # Losses
         source_loss1 = args.mu1 * criterion1(logits1, labels)
         source_loss2 = args.mu2 * criterion1(logits2, correct_sc)

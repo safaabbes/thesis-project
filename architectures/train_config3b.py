@@ -278,11 +278,24 @@ def do_epoch_train(loader_train_source, model, criterion1, optimizer, args, logg
         wrong_mapping = torch.tensor(tmp2['data'], dtype=torch.float32, device=args.device, requires_grad=False)
         logits3 = torch.mm(logits1, wrong_mapping) / (1e-6 + torch.sum(wrong_mapping, dim=0))
         _, preds3 = torch.max(logits3, dim=1)
-
+        
+        # Third Loss Possibilities
+        # Option 1: Entropy Loss, Criterion1 is CE
+        # source_loss3 = criterion1(logits3, logits3) #Explodes > Goes to NAN
+        # Option 2: ||L*LT - I|| > Explodes > Goes to inf
+        source_loss3 = torch.norm(torch.mm(logits3, logits3.transpose(1, 0)) - torch.eye(args.bs, device=args.device, requires_grad=False))
+        # Option 3; Entropy Loss**2
+        # source_loss3 = torch.pow(criterion1(logits3, logits3),2) > Goes to NAN
+        
+        # logger.info('source_loss3 {}'.format(source_loss3))
+        # sys.exit()
+        
+        
         # Losses
         source_loss1 = args.mu1 * criterion1(logits1, labels)
         source_loss2 = args.mu2 * criterion1(logits2, correct_sc)
-        source_loss3 = args.mu3 * criterion1(logits3, logits3) #Entropy Loss
+        source_loss3 = args.mu3 * source_loss3 #Entropy Loss
+        logger.info('source_loss3 {}'.format(source_loss3))
         loss = source_loss1 + source_loss2 + source_loss3
 
         # Back-propagation
