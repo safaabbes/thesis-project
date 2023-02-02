@@ -11,6 +11,7 @@ import torchvision
 import torchinfo
 import wandb
 
+import torch.nn.functional as F
 from sklearn.metrics import pairwise_distances
 import matplotlib.pyplot as plt
 
@@ -189,9 +190,6 @@ def run_train(args, logger, seed):
     criterion1 = loss_ce()
     criterion1 = criterion1.to(args.device)
     
-    # Compute Distance Matrix before training
-    plot_dist_matrix(model.head, args)    
-    
     # # Create Wandb logger
     wandb.init(dir='../',
       project='ConfigA', 
@@ -223,6 +221,7 @@ def run_train(args, logger, seed):
 
         # Update Wandb logger
         update_wandb(epoch, stats_train, stats_valid)
+        get_distances(epoch, model, args, wandb)
 
         # Save current checkpoint
         if epoch % args.freq_saving == 0:
@@ -232,8 +231,6 @@ def run_train(args, logger, seed):
                 'model_state_dict': model.module.state_dict() if hasattr(model, 'module') else model.state_dict()},
                 os.path.join(args.path_weights, '{:04d}.tar'.format(epoch)))
             
-            # Compute distance Matrix
-            plot_dist_matrix(model.head, args, epoch)  
             
     # Save last checkpoint
     torch.save({
@@ -403,34 +400,133 @@ def update_wandb(epoch, stats_train, stats_valid):
         "valid/mca1": stats_valid['mca1'].item(),
     })
 
+def get_distances(epoch, model, args, wandb):
+    
+    # Get head weights (40,2080)
+    head_weights = model.head.weight.data                   #Shape (40,2080)
+    transposed_head_weights = torch.transpose(head_weights, 0, 1)      #Shape (2080,40)
+    # Get mapping from C1 to C2 (40,13)
+    tmp = np.load('mapping.npz')
+    mapping = torch.tensor(tmp['data'], dtype=torch.float32, device= args.device, requires_grad=False)   #Shape (40,13)
+    # Get SC weights (2080,40)
+    sc_weights = torch.mm(transposed_head_weights, mapping) / (1e-6 + torch.sum(mapping, dim=0))   #Shape (2080,13)
+    
+    # Get Average of all pairwise distances
+    pair_dist = F.pdist(head_weights)
+    distance_all = torch.mean(pair_dist)
+    
+    # Get Average of inter-cluster distances
+    sc_weights = torch.transpose(sc_weights, 0, 1)   #Shape (13,2080)
+    sc_pair_dist = F.pdist(sc_weights)
+    distance_inter_cluster = torch.mean(sc_pair_dist)
+    
+    # Get Intra-Cluster of each cluster (distance relative to the centroid)
+    mask = torch.tensor(tmp['data'], dtype=torch.bool, requires_grad=False) 
+    for cluster in range(args.num_categories2):
+        intra_cluster_dist = torch.cdist(sc_weights[cluster,:].unsqueeze(0), head_weights[mask[:,cluster]])
+        wandb.log({"distance/intra_cluster_{}".format(cluster): distance_inter_cluster.item()})
+    
+    wandb.log({
+        "distance/epoch": epoch,
+        "distance/pairwise_all": distance_all.item(),
+        "distance/inter_cluster": distance_inter_cluster.item(),
+        })
+    
+    # Plot distance matrix
+    distance_mat = pairwise_distances(head_weights.cpu().numpy())
+    sc_distance_mat = pairwise_distances(sc_weights.cpu().numpy())
+    plot_dist_matrix(distance_mat, epoch, wandb, args)
+    plot_dist_matrix(sc_distance_mat, epoch, wandb, args)
+    
+    # # Get Distances for 3 Sample Clusters
+    # mask = torch.tensor(tmp['data'], dtype=torch.bool, requires_grad=False) 
+    # cluster_0_weights = head_weights[mask[:,0]] # Furniture Cluster 5 instances
+    # cluster_1_weights = head_weights[mask[:,1]] # Mammal Cluster 9 instances
+    # cluster_5_weights = head_weights[mask[:,5]] # Road Transport Cluster 5 instances
+    # intra_cluster_0 = torch.mean(F.pdist(cluster_0_weights))
+    # intra_cluster_1 = torch.mean(F.pdist(cluster_1_weights))
+    # intra_cluster_5 = torch.mean(F.pdist(cluster_5_weights))
+    # # Plot Sample Cluster
+    # intra_cluster_0_mat = pairwise_distances(cluster_0_weights.cpu().numpy())
+    # intra_cluster_1_mat = pairwise_distances(cluster_1_weights.cpu().numpy())
+    # intra_cluster_5_mat = pairwise_distances(cluster_5_weights.cpu().numpy())
+    # plot_dist_matrix_sample(intra_cluster_0_mat, epoch, wandb, args, 'intra_cluster_furniture_mat')
+    # plot_dist_matrix_sample(intra_cluster_1_mat, epoch, wandb, args, 'intra_cluster_mammal_mat')
+    # plot_dist_matrix_sample(intra_cluster_5_mat, epoch, wandb, args, 'intra_cluster_road_transport_mat')
+    # wandb.log({
+    #     "distance/intra_cluster_furniture": intra_cluster_0,
+    #     "distance/inter_cluster_mammal": intra_cluster_1,
+    #     "distance/inter_cluster_road_transport": intra_cluster_5,
+    #     })
+     
+# def plot_dist_matrix_sample(distance_mat, epoch, wandb, args, title):
+    
+#     # distance_mat = distance_mat / np.sum(distance_mat, axis=0)
+    
+#     plt.figure(figsize=(25, 25))
+#     plt.imshow(np.around(distance_mat, decimals=2), cmap='Blues')
 
-def plot_dist_matrix(head, args, epoch=None):
-    head_weights = head.weight.data.cpu().numpy()
-    distance_mat = pairwise_distances(head_weights)
-    plt.figure(figsize=(40, 40))
+#     plt.title('Distance Matrix {}_{}_{}'.format(title, args.exp, epoch))
+#     plt.xlabel('Classes')
+#     plt.ylabel('Classes')
+        
+#     plt.colorbar()
+#     ax = plt.gca()
+#     ax.set_xticks(np.arange(len(distance_mat)))
+#     ax.set_yticks(np.arange(len(distance_mat)))
+#     ax.set_xticklabels(np.arange(len(distance_mat)))
+#     ax.set_yticklabels(np.arange(len(distance_mat)))
+    
+#     for i in range(len(distance_mat)):
+#         for j in range(len(distance_mat)):
+#             text = plt.text(j, i, round(distance_mat[i, j], 2),
+#                         ha="center", va="center", color="black", fontsize=30)
+    
+#     # plt.savefig(os.path.join(args.path_weights,'dist_{}.png'.format(epoch)), format='png', dpi=300)
+#     # np.savez(os.path.join(args.path_weights, 'dist_{}.npz'.format(epoch)), data=distance_mat)
+#     wandb.log({"distance/{}".format(title): wandb.Image(plt)})
+#     plt.close()    
+    
+
+def plot_dist_matrix(distance_mat, epoch, wandb, args):
+    
+    # distance_mat = distance_mat / np.sum(distance_mat, axis=0)
+    if len(distance_mat) == args.num_categories1:
+        plt.figure(figsize=(40, 40))
+    elif len(distance_mat) == args.num_categories2:
+        plt.figure(figsize=(20, 20))
     plt.imshow(np.around(distance_mat, decimals=2), cmap='Blues')
-    plt.xlabel('Classes')
-    plt.ylabel('Classes')
-    if epoch is None:
-        plt.title('Distance Matrix {}_0'.format(args.exp))
-    else:
+
+    if len(distance_mat) == args.num_categories1:
         plt.title('Distance Matrix {}_{}'.format(args.exp, epoch))
+        plt.xlabel('Classes')
+        plt.ylabel('Classes')
+    elif len(distance_mat) == args.num_categories2:
+        plt.title('Inter-Cluster Distance Matrix {}_{}'.format(args.exp, epoch))
+        plt.xlabel('Super-Classes')
+        plt.ylabel('Super-Classes')
+        
     plt.colorbar()
     ax = plt.gca()
     ax.set_xticks(np.arange(len(distance_mat)))
     ax.set_yticks(np.arange(len(distance_mat)))
     ax.set_xticklabels(np.arange(len(distance_mat)))
     ax.set_yticklabels(np.arange(len(distance_mat)))
+    
     for i in range(len(distance_mat)):
         for j in range(len(distance_mat)):
             text = plt.text(j, i, round(distance_mat[i, j], 2),
                         ha="center", va="center", color="black", fontsize=15)
-    if epoch is None:
-        plt.savefig(os.path.join(args.path_weights,'dist_0.png'), format='png', dpi=300)
-        np.savez(os.path.join(args.path_weights, 'dist_0.npz'), data=distance_mat)
-    else:
-        plt.savefig(os.path.join(args.path_weights,'dist_{}.png'.format(epoch)), format='png', dpi=300)
-        np.savez(os.path.join(args.path_weights, 'dist_{}.npz'.format(epoch)), data=distance_mat)
+    
+    if len(distance_mat) == args.num_categories1:
+        # plt.savefig(os.path.join(args.path_weights,'dist_{}.png'.format(epoch)), format='png', dpi=300)
+        # np.savez(os.path.join(args.path_weights, 'dist_{}.npz'.format(epoch)), data=distance_mat)
+        wandb.log({"distance/dist": wandb.Image(plt)})
+    elif len(distance_mat) == args.num_categories2:
+        # plt.savefig(os.path.join(args.path_weights,'sc_dist_{}.png'.format(epoch)), format='png', dpi=300)
+        # np.savez(os.path.join(args.path_weights, 'sc_dist_{}.npz'.format(epoch)), data=distance_mat)
+        wandb.log({"distance/sc_dist": wandb.Image(plt)})
+        
     plt.close()
 
 if __name__ == '__main__':

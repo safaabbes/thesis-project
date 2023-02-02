@@ -20,6 +20,8 @@ class resnet50_1h(torch.nn.Module):
         self.head = torch.nn.Linear(num_filters, args.num_categories1)
         torch.nn.init.xavier_normal_(self.head.weight)
 
+        # TODO set bias to 0
+        
     def forward(self, x):
         x = self.backbone(x)
         x = F.normalize(x)
