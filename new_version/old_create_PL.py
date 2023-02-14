@@ -30,12 +30,11 @@ def parse_args():
     
     # Data
     parser.add_argument('--PL_domain', type=str, required=True)
-    parser.add_argument('--condition', type=str, default='on_class')
-    parser.add_argument('--percentage', type=float, default=0.5)
+    parser.add_argument('--condition', type=str, required=True)
+    parser.add_argument('--threshold', type=float, required=0.9)
 
     # Model
     parser.add_argument('--checkpoint', type=str, required=True)
-
 
     args = parser.parse_args()
     return args
@@ -63,14 +62,14 @@ def main():
     args.checkpoint = args_test.checkpoint
     args.path_weights = args_test.path_weights
     args.condition = args_test.condition
-    args.percentage = args_test.percentage
+    args.threshold = args_test.threshold
 
     # Create logger
-    path_log = os.path.join(args.path_weights, 'LOG_PL_{}_{}_{}_{}.txt'.format(args.PL_domain, args.checkpoint, args.percentage, args.condition))
+    path_log = os.path.join(args.path_weights, 'log_PL_{:s}_{:s}.txt'.format(args.PL_domain, args.checkpoint))
     logger = get_logger(path_log)
 
     # Activate CUDNN backend
-    torch.backends.cudnn.enabled = True
+    torch.backends.cudnn.enabled = False
 
     # Log input arguments
     for arg, value in vars(args).items():
@@ -128,8 +127,7 @@ def run_create_PL(args, logger, checkpoint):
 
     # Init stats
     file_names = loader_test.dataset.pointer
-    pseudo_pointer = list()
-    # pseudo_file_names = list()
+    pseudo_file_names = list()
     correct_class = 0
     correct_sc = 0
     # Loop over test mini-batches
@@ -162,74 +160,65 @@ def run_create_PL(args, logger, checkpoint):
         # logger.info('logits1 {}'.format(logits1))
         logits2 = F.softmax(logits2, dim=-1)
         probs1, preds1 = torch.max(logits1, dim=1)
-        probs2, preds2 = torch.max(logits2, dim=1) 
-
-        for j in range(len(images_file_names)):
-            pseudo_pointer.append([str(images_file_names[j][0]), 
-                                    str(categories1[j].item()), 
-                                    str(preds1[j].item()),
-                                    str(probs1[j].item()), 
-                                    str(categories2[j].item()), 
-                                    str(preds2[j].item()),
-                                    str(probs2[j].item()),
-            ])
-
-    # Sort All Samples decreasingly along the probabilities
-    if args.condition == 'on_class':
-        sorted_pseudo_pointer = sorted(pseudo_pointer, key=lambda x: x[3], reverse=True)
-    elif args.condition == 'on_sc':
-        sorted_pseudo_pointer = sorted(pseudo_pointer, key=lambda x: x[6], reverse=True)
-    else:
-        NotImplementedError
-    # Select highest % of confident PL
-    selected_nb = int(args.percentage * len(sorted_pseudo_pointer))
-    selected_PL = np.array(sorted_pseudo_pointer[:selected_nb])
-    
-
-    # PL Statistics
-    # Nb of Correct Classes
-    correct_categories = np.sum(np.equal(selected_PL[:, 1].astype(int), selected_PL[:, 2].astype(int)))
-    correct_categories_P = correct_categories / selected_nb 
-    # Nb of Corrent Super-Classes
-    correct_sc = np.sum(np.equal(selected_PL[:, 4].astype(int), selected_PL[:, 5].astype(int)))
-    correct_sc_P = correct_sc / selected_nb 
-    # Nb of Coherent assignments
-    # coherent_PL =
-    categories_preds = torch.from_numpy(selected_PL[:, 2].astype(int))
-    categories_preds = torch.nn.functional.one_hot(categories_preds, num_classes=args.num_categories1).to(args.device).to(torch.float)
-    tmp = np.load('mapping.npz')
-    mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
-    categories_true_sc = torch.mm(categories_preds, mapping)
-    sc_preds = torch.from_numpy(selected_PL[:, 4].astype(int))
-    sc_preds = torch.nn.functional.one_hot(sc_preds, num_classes=args.num_categories2).to(args.device).to(torch.float)
-    nb_coherence = torch.sum((categories_true_sc == sc_preds).all(dim=1)).item()
-    coherence_P = nb_coherence / selected_nb
+        probs2, preds2 = torch.max(logits2, dim=1)
+        
+        # Get Pseudo Labels
+        # Confidence thresholding is a must because coherence alone doesn't create reliable PL however there are two options to thresholding: on class prob or on sc_prob 
+        # Getting Coherence
+        one_hot_preds1 = torch.nn.functional.one_hot(preds1, num_classes=args.num_categories1).to(torch.float)
+        one_hot_preds2 = torch.nn.functional.one_hot(preds2, num_classes=args.num_categories2).to(torch.float)
+        tmp = np.load('mapping.npz')
+        mapping = torch.tensor(tmp['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+        preds1_true_sc = torch.mm(one_hot_preds1, mapping)
+        mask_coherence = (preds1_true_sc == one_hot_preds2).all(dim=1)
+        for j, p in enumerate(mask_coherence):
+            threshold = args.threshold
+            if args.condition == 'confidence_on_class':
+                # logger.info('categories1 {}'.format(categories1))
+                # logger.info(' preds1 {}'.format(preds1))
+                # logger.info(' probs1 {}'.format(probs1))
+                if p.item() and probs1[j]>threshold:
+                    pseudo_file_names.append([str(images_file_names[j][0]), str(preds1[j].cpu().tolist()), str(preds2[j].cpu().tolist())])
+                    # Correct PL Check
+                    if preds1[j] == categories1[j]:
+                        correct_class += 1
+                    if preds2[j] == categories2[j]:
+                        correct_sc += 1
+            elif args.condition == 'confidence_on_sc':
+                if p.item() and probs2[j]>threshold:
+                    pseudo_file_names.append([str(images_file_names[j][0]), str(preds1[j].cpu().tolist()), str(preds2[j].cpu().tolist())])
+                    # Correct PL Check
+                    if preds1[j] == categories1[j]:
+                        correct_class += 1
+                    if preds2[j] == categories2[j]:
+                        correct_sc += 1
 
     stats = {
-        'selected_nb': selected_nb,
-        'correct_categories': correct_categories,
-        'correct_categories_P': correct_categories_P,
+        'all_PL': len(pseudo_file_names),
+        'Total_%': len(pseudo_file_names)/len(dataset_test)*100,
+        'correct_class': correct_class,
+        'wrong_class': len(pseudo_file_names) - correct_class,
         'correct_sc': correct_sc,
-        'correct_sc_P': correct_sc_P,
-        'nb_coherence': nb_coherence,
-        'coherence_P': coherence_P,
+        'correct_%': correct_sc/len(pseudo_file_names)*100,
+        'wrong_sc': len(pseudo_file_names) - correct_sc,
         }
 
-    logger.info('Nb Selected PL: {}, \n \
-        Nb correct categories: {}, Correct Categories %: {:.4f} \n \
-        Nb correct SC: {}, Correct SC %: {:.4f} \n \
-        Nb of Coherent Class-SC: {}, Coherence %: {:.4f}'.format(   
-        stats['selected_nb'], stats['correct_categories'], stats['correct_categories_P'], 
-        stats['correct_sc'], stats['correct_sc_P'], stats['nb_coherence'],  stats['coherence_P']))
+    logger.info('Total PL: {}, Total_%: {:.2f}, correct_%: {:.2f}, \n \
+                PL with correct_class: {}, wrong_class: {}, \n \
+                PL with correct_sc: {}, wrong_sc: {}'.format(
+        stats['all_PL'], stats['Total_%'], stats['correct_%'], 
+        stats['correct_class'], stats['wrong_class'], 
+        stats['correct_sc'],  stats['wrong_sc']))
     
-
-    torch.save({'selected_PL': selected_PL, 
+    # logger.info('{}'.format(pseudo_file_names[:30]))
+    
+    torch.save({'images_file_array': pseudo_file_names, 
                 'PL_domain': args.PL_domain,
                 'used_exp': args.exp,
                 'checkpoint': args.checkpoint,
-                'percentage': args.percentage,
                 'condition': args.condition,
-                }, os.path.join(args.path_weights, '{}_{}_{}_{}.tar'.format(args.PL_domain, args.checkpoint, args.percentage, args.condition)))
+                'threshold': args.threshold,
+                }, os.path.join(args.path_weights, '{}_{}_{}_{}.tar'.format(args.PL_domain, args.checkpoint, args.threshold, args.condition)))
 
 if __name__ == '__main__':
     main()

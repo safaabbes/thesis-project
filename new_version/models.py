@@ -19,8 +19,7 @@ class resnet50_1h(torch.nn.Module):
         # Head
         self.head = torch.nn.Linear(num_filters, args.num_categories1)
         torch.nn.init.xavier_normal_(self.head.weight)
-
-        # TODO set bias to 0
+        self.head.bias.data.zero_()
         
     def forward(self, x):
         x = self.backbone(x)
@@ -44,8 +43,10 @@ class resnet50_2h(torch.nn.Module):
         # Heads
         self.head1 = torch.nn.Linear(num_filters, args.num_categories1)
         torch.nn.init.xavier_normal_(self.head1.weight)
+        self.head1.bias.data.zero_()
         self.head2 = torch.nn.Linear(num_filters, args.num_categories2)
         torch.nn.init.xavier_normal_(self.head2.weight)
+        self.head2.bias.data.zero_()
 
     def forward(self, x):
         x = self.backbone(x)

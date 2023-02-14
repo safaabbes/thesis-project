@@ -401,7 +401,8 @@ def update_wandb(epoch, stats_train, stats_valid):
 def head2_plot_dist_matrix(head, args, epoch, wandb):
     head_weights = head.weight.data
     inter_dist = torch.mean(F.pdist(head_weights))
-    wandb.log({ "distance/head2_inter_distance": inter_dist,})
+    wandb.log({"distance/epoch": epoch,
+               "distance/head2_inter_distance": inter_dist,})
     head_weights = head_weights.cpu().numpy()
     distance_mat = pairwise_distances(head_weights)
     plt.figure(figsize=(20, 20))
@@ -421,14 +422,15 @@ def head2_plot_dist_matrix(head, args, epoch, wandb):
                         ha="center", va="center", color="black", fontsize=15)
     # plt.savefig(os.path.join(args.path_weights,'sc_dist_{}.png'.format(epoch)), format='png', dpi=300)
     # np.savez(os.path.join(args.path_weights, 'sc_dist_{}.npz'.format(epoch)), data=distance_mat) 
-    wandb.log({"distance/head2": wandb.Image(plt)})
+    wandb.log({
+        "distance/head2": wandb.Image(plt)})
     plt.close()
 
 
-def get_distances(epoch, model, args, wandb):
+def get_distances(epoch, head, args, wandb):
     
     # Get head weights (40,2080)
-    head_weights = model.head.weight.data                   #Shape (40,2080)
+    head_weights = head.weight.data                   #Shape (40,2080)
     transposed_head_weights = torch.transpose(head_weights, 0, 1)      #Shape (2080,40)
     # Get mapping from C1 to C2 (40,13)
     tmp = np.load('mapping.npz')
@@ -448,8 +450,10 @@ def get_distances(epoch, model, args, wandb):
     # Get Intra-Cluster of each cluster (distance relative to the centroid)
     mask = torch.tensor(tmp['data'], dtype=torch.bool, requires_grad=False) 
     for cluster in range(args.num_categories2):
-        intra_cluster_dist = torch.cdist(sc_weights[cluster,:].unsqueeze(0), head_weights[mask[:,cluster]])
-        wandb.log({"distance/intra_cluster_{}".format(cluster): distance_inter_cluster.item()})
+        intra_cluster_dist = torch.mean(torch.cdist(sc_weights[cluster,:].unsqueeze(0), head_weights[mask[:,cluster]]))
+        wandb.log({
+            "distance/epoch": epoch,
+            "distance/intra_cluster_{}".format(cluster): intra_cluster_dist.item()})
     
     wandb.log({
         "distance/epoch": epoch,

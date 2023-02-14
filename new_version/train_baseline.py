@@ -391,8 +391,10 @@ def get_distances(epoch, model, args, wandb):
     # Get Intra-Cluster of each cluster (distance relative to the centroid)
     mask = torch.tensor(tmp['data'], dtype=torch.bool, requires_grad=False) 
     for cluster in range(args.num_categories2):
-        intra_cluster_dist = torch.cdist(sc_weights[cluster,:].unsqueeze(0), head_weights[mask[:,cluster]])
-        wandb.log({"distance/intra_cluster_{}".format(cluster): distance_inter_cluster.item()})
+        intra_cluster_dist = torch.mean(torch.cdist(sc_weights[cluster,:].unsqueeze(0), head_weights[mask[:,cluster]]))
+        wandb.log({
+            "distance/epoch": epoch,
+            "distance/intra_cluster_{}".format(cluster): intra_cluster_dist.item()})
     
     wandb.log({
         "distance/epoch": epoch,

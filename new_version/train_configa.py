@@ -36,6 +36,11 @@ def parse_args():
     parser.add_argument('--num_epochs', type=int, default=40)
     parser.add_argument('--balance_mini_batches', default=False, action='store_true')
 
+    parser.add_argument('--prev_arch', type=str, required=True)
+    parser.add_argument('--prev_exp', type=str, required=True)
+    parser.add_argument('--prev_seed', type=str, required=True)
+    parser.add_argument('--prev_checkpoint', type=str, default='0040')
+
     # Data
     parser.add_argument('--source_train', type=str, required=True)
     parser.add_argument('--source_test', type=str, required=True)
@@ -67,6 +72,7 @@ def main():
 
     # Update path to weights and runs
     args.path_weights = os.path.join('..', '..','data', 'new_exps', 'configa', args.exp)
+    args.prev_exp = os.path.join('..','..', 'data', 'new_exps', args.prev_arch, args.prev_exp, args.prev_seed)
     
     # Create experiment folder
     os.makedirs(args.path_weights, exist_ok=True)
@@ -154,6 +160,9 @@ def run_train(args, logger, seed):
     else:
         raise NotImplementedError
 
+    prev_checkpoint = torch.load(os.path.join(args.prev_exp, '{:s}.tar'.format(args.prev_checkpoint)))
+    model.load_state_dict(prev_checkpoint['model_state_dict'])
+    
     # Send the model to the device
     model = model.to(args.device)
     # logger.info('Model is on device: {}'.format(next(model.parameters()).device))
@@ -423,8 +432,10 @@ def get_distances(epoch, model, args, wandb):
     # Get Intra-Cluster of each cluster (distance relative to the centroid)
     mask = torch.tensor(tmp['data'], dtype=torch.bool, requires_grad=False) 
     for cluster in range(args.num_categories2):
-        intra_cluster_dist = torch.cdist(sc_weights[cluster,:].unsqueeze(0), head_weights[mask[:,cluster]])
-        wandb.log({"distance/intra_cluster_{}".format(cluster): distance_inter_cluster.item()})
+        intra_cluster_dist = torch.mean(torch.cdist(sc_weights[cluster,:].unsqueeze(0), head_weights[mask[:,cluster]]))
+        wandb.log({
+            "distance/epoch": epoch,
+            "distance/intra_cluster_{}".format(cluster): intra_cluster_dist.item()})
     
     wandb.log({
         "distance/epoch": epoch,

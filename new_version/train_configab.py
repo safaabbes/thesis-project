@@ -15,9 +15,9 @@ import torch.nn.functional as F
 from sklearn.metrics import pairwise_distances
 import matplotlib.pyplot as plt
 
-from datasets import dataset
+from datasets import dataset_b as dataset
 from models import resnet50_1h
-from losses import loss_ce, HLoss
+from losses import loss_ce
 sys.path.append('..')
 from utils import get_logger
 
@@ -36,6 +36,11 @@ def parse_args():
     parser.add_argument('--num_epochs', type=int, default=40)
     parser.add_argument('--balance_mini_batches', default=False, action='store_true')
 
+    # parser.add_argument('--prev_arch', type=str, required=True)
+    # parser.add_argument('--prev_exp', type=str, required=True)
+    # parser.add_argument('--prev_seed', type=str, required=True)
+    # parser.add_argument('--prev_checkpoint', type=str, default='0040')
+
     # Data
     parser.add_argument('--source_train', type=str, required=True)
     parser.add_argument('--source_test', type=str, required=True)
@@ -53,10 +58,10 @@ def parse_args():
     parser.add_argument('--w_decay', type=float, default=1e-05)
     
     
-    parser.add_argument('--mu1', type=float, default=0.33)
-    parser.add_argument('--mu2', type=float, default=0.33)
-    parser.add_argument('--mu3', type=float, default=0.33)
-
+    parser.add_argument('--mu1', type=float, default=0.6)
+    parser.add_argument('--mu2', type=float, default=0.5)
+    parser.add_argument('--mu2b', type=float, default=0.5)
+    
     args = parser.parse_args()
     return args
 
@@ -67,7 +72,8 @@ def main():
     args = parse_args()
 
     # Update path to weights and runs
-    args.path_weights = os.path.join('..', '..','data', 'new_exps', 'configb', args.exp)
+    args.path_weights = os.path.join('..', '..','data', 'new_exps', 'configab', args.exp)
+    # args.prev_exp = os.path.join('..','..', 'data', 'new_exps', args.prev_arch, args.prev_exp, args.prev_seed)
     
     # Create experiment folder
     os.makedirs(args.path_weights, exist_ok=True)
@@ -103,7 +109,7 @@ def main():
 
 def run_train(args, logger, seed):
     
-    args.path_weights = os.path.join('..', '..','data', 'new_exps', 'configb', args.exp , str(seed))
+    args.path_weights = os.path.join('..', '..','data', 'new_exps', 'configab', args.exp , str(seed))
     os.makedirs(args.path_weights, exist_ok=True)
 
     # Get the source datasets
@@ -155,6 +161,9 @@ def run_train(args, logger, seed):
     else:
         raise NotImplementedError
 
+    # prev_checkpoint = torch.load(os.path.join(args.prev_exp, '{:s}.tar'.format(args.prev_checkpoint)))
+    # model.load_state_dict(prev_checkpoint['model_state_dict'])
+    
     # Send the model to the device
     model = model.to(args.device)
     # logger.info('Model is on device: {}'.format(next(model.parameters()).device))
@@ -191,12 +200,9 @@ def run_train(args, logger, seed):
     criterion1 = loss_ce()
     criterion1 = criterion1.to(args.device)
     
-    criterion2 = HLoss()
-    criterion2 = criterion2.to(args.device) 
-    
     # # Create Wandb logger
     wandb.init(dir='../',
-      project='ConfigB', 
+      project='ConfigAB', 
       name='{}_{}'.format(args.exp, seed),
       config = {"model_type": args.model_type,
                 "source_train": args.source_train,
@@ -205,9 +211,6 @@ def run_train(args, logger, seed):
                 "batch_size": args.bs,
                 "balance": args.balance_mini_batches,
                 "lr": args.lr,
-                "mu1": args.mu1,
-                "mu2": args.mu2,
-                "mu3": args.mu3,
                 })
     
     # Loop over epochs
@@ -216,7 +219,7 @@ def run_train(args, logger, seed):
 
         # Training
         since = time.time()
-        stats_train = do_epoch_train(loader_train_source, model, criterion1, criterion2, optimizer, args, logger)
+        stats_train = do_epoch_train(loader_train_source, model, criterion1, optimizer, args, epoch)
         logger.info('TRN, Epoch: {:4d}, Loss: {:e}, OA1: {:.4f}, MCA1: {:.4f}, Elapsed: {:.1f}s'.format(
             epoch, stats_train['loss'], stats_train['oa1'], stats_train['mca1'], time.time() - since))
 
@@ -238,6 +241,7 @@ def run_train(args, logger, seed):
                 'model_state_dict': model.module.state_dict() if hasattr(model, 'module') else model.state_dict()},
                 os.path.join(args.path_weights, '{:04d}.tar'.format(epoch)))
             
+            
     # Save last checkpoint
     torch.save({
         'epoch': epoch,
@@ -250,24 +254,25 @@ def run_train(args, logger, seed):
     logger.info('Elapsed time: {:.2f} minutes'.format((end - start)/60))
 
 
-def do_epoch_train(loader_train_source, model, criterion1, criterion2, optimizer, args, logger):
+def do_epoch_train(loader_train_source, model, criterion1, optimizer, args, epoch):
 
     # Set the model in training mode
     model = model.train()
 
     # Init stats
-    running_loss, running_source_loss1, running_source_loss2, running_source_loss3 = list(), list(), list(), list()
+    running_loss, running_source_loss1, running_source_loss2, running_source_loss2b = list(), list(), list(), list()
     running_oa1, running_mca1_num, running_mca1_den = list(), list(), list()
     running_oa2, running_mca2_num, running_mca2_den = list(), list(), list()
-    # Loop on source dataloader
+    # Loop on source dataloader. Source: https://stackoverflow.com/questions/51444059/how-to-iterate-over-two-dataloaders-simultaneously-using-pytorch
     for i, data_source in enumerate(loader_train_source):
 
         # Load source mini-batch
-        images_source, categories1_source, categories2_source = data_source
+        images_source, categories1_source, categories2_source, categories2b_source = data_source
         images_source = images_source.to(args.device, non_blocking=True)
         categories1_source = categories1_source.to(args.device, non_blocking=True)
         categories2_source = categories2_source.to(args.device, non_blocking=True)
-
+        categories2b_source = categories2b_source.to(args.device, non_blocking=True)
+        
         # Zero the parameters gradients
         optimizer.zero_grad()
 
@@ -280,46 +285,23 @@ def do_epoch_train(loader_train_source, model, criterion1, criterion2, optimizer
         logits2_source = torch.mm(logits1_source, mapping) / (1e-6 + torch.sum(mapping, dim=0))
         _, preds2_source = torch.max(logits2_source, dim=1)
         
-         # Entropy Loss
-        # mapping = torch.tensor(tmp['data'], dtype=torch.int, device=args.device, requires_grad=False)
-        # all_entropy_losses = 0
-        # for cluster in range(args.num_categories2):
-        #     # Getting the cluster i column
-        #     cluster_column = mapping[:,cluster]
-        #     # Creating Mi with shape BxC
-        #     Mi = torch.cat([cluster_column]*args.bs, dim=0).view(-1, args.num_categories1)
-        #     # Masking the logits with Mi
-        #     x = logits1_source * Mi # x = masked logits
-        #     # Entropy Loss
-        #     entropy_loss = criterion2(x)
-        #     # Divide by the number of clusters
-        #     entropy_loss = entropy_loss / args.num_categories2
-        #     all_entropy_losses +=entropy_loss
-        # entropy_loss = all_entropy_losses / args.bs
+        tmpb = np.load('biased_mapping.npz')
+        biased_mapping = torch.tensor(tmpb['data'], dtype=torch.float32, device=args.device, requires_grad=False)
+        logits2b_source = torch.mm(logits1_source, biased_mapping) / (1e-6 + torch.sum(biased_mapping, dim=0))
+        _, preds2b_source = torch.max(logits2b_source, dim=1) 
         
-        mask = torch.tensor(tmp['data'], dtype=torch.bool, device=args.device, requires_grad=False)
-        cumulative_logits_entropy_loss = []
-        for logit in logits1_source:
-            # logger.info('logit: {}'.format(logit))
-            cumulative_cluster_entropy_loss = []
-            for cluster in range(args.num_categories2):
-                cluster_logits = logit[mask[:,cluster]]
-                # logger.info('cluster_logits: {}'.format(cluster_logits))
-                if len(cluster_logits) > 1:
-                    entropy_loss = criterion2(cluster_logits.unsqueeze(0))
-                    cumulative_cluster_entropy_loss.append(entropy_loss)
-                # logger.info('entropy_loss: {}'.format(entropy_loss))
-            cumulative_cluster_entropy_loss_tensor = torch.stack([cumulative_cluster_entropy_loss[i] for i in range(len(cumulative_cluster_entropy_loss))])
-            logit_entropy_loss = torch.sum(cumulative_cluster_entropy_loss_tensor, axis=0) / len(cumulative_cluster_entropy_loss_tensor)
-            cumulative_logits_entropy_loss.append(logit_entropy_loss)
-        cumulative_logits_entropy_loss_tensor = torch.stack([cumulative_logits_entropy_loss[i] for i in range(len(cumulative_logits_entropy_loss))])
-        source_loss3 = torch.sum(cumulative_logits_entropy_loss_tensor, axis=0) / len(cumulative_logits_entropy_loss_tensor)
-
         # Losses
+        if epoch < 20:
+            args.mu2 = 0.4
+            args.mu2b = 0 
+        else:
+            args.mu2 = 0
+            args.mu2b = 0.4
+             
         source_loss1 = args.mu1 * criterion1(logits1_source, categories1_source)  
         source_loss2 = args.mu2 * criterion1(logits2_source, categories2_source)  
-        source_loss3 = args.mu3 * source_loss3
-        loss = source_loss1 + source_loss2 + source_loss3
+        source_loss2b = args.mu2b * criterion1(logits2b_source, categories2b_source)  
+        loss = source_loss1 + source_loss2 + source_loss2b
         
         # Back-propagation
         loss.backward()
@@ -331,7 +313,7 @@ def do_epoch_train(loader_train_source, model, criterion1, criterion2, optimizer
         running_loss.append(loss.item())
         running_source_loss1.append(source_loss1.item())
         running_source_loss2.append(source_loss2.item())
-        running_source_loss3.append(source_loss3.item())
+        running_source_loss2b.append(source_loss2b.item())
 
         # Update metrics
         oa1 = torch.sum(preds1_source == categories1_source.squeeze()) / len(categories1_source)
@@ -354,6 +336,7 @@ def do_epoch_train(loader_train_source, model, criterion1, criterion2, optimizer
         running_mca2_num.append(mca2_num.detach().cpu().numpy())
         running_mca2_den.append(mca2_den.detach().cpu().numpy())
 
+
     # Update MCA metric
     mca1_num = np.sum(running_mca1_num, axis=0)
     mca1_den = 1e-16 + np.sum(running_mca1_den, axis=0)
@@ -364,7 +347,7 @@ def do_epoch_train(loader_train_source, model, criterion1, criterion2, optimizer
         'loss': np.mean(running_loss),
         'source_loss1': np.mean(running_source_loss1),
         'source_loss2': np.mean(running_source_loss2),
-        'source_loss3': np.mean(running_source_loss3),
+        'source_loss2b': np.mean(running_source_loss2b),
         'oa1': np.mean(running_oa1),
         'mca1': np.mean(mca1_num/mca1_den),
         'oa2': np.mean(running_oa2),
@@ -387,7 +370,7 @@ def do_epoch_valid(loader_valid_source, model, criterion1, args):
     for data_source in loader_valid_source:
 
         # Load source mini-batch
-        images_source, categories1_source, _ = data_source
+        images_source, categories1_source, _ ,_= data_source
         images_source = images_source.to(args.device, non_blocking=True)
         categories1_source = categories1_source.to(args.device, non_blocking=True)
 
@@ -419,8 +402,8 @@ def do_epoch_valid(loader_valid_source, model, criterion1, args):
 
     stats = {
         'loss': np.mean(running_loss),
-        'oa1': np.mean(running_oa1)*100,
-        'mca1': np.mean(mca1_num/mca1_den)*100,
+        'oa1': np.mean(running_oa1),
+        'mca1': np.mean(mca1_num/mca1_den),
         }
 
     return stats
@@ -434,7 +417,7 @@ def update_wandb(epoch, stats_train, stats_valid):
         "train/loss": stats_train['loss'].item(),
         "train/source_loss1": stats_train['source_loss1'].item(),
         "train/source_loss2": stats_train['source_loss2'].item(),
-        "train/source_loss3": stats_train['source_loss3'].item(),
+        "train/source_loss2b": stats_train['source_loss2b'].item(),
         "train/oa1": stats_train['oa1'].item(),
         "train/mca1": stats_train['mca1'].item(),
         "train/oa2": stats_train['oa2'].item(),
@@ -444,7 +427,6 @@ def update_wandb(epoch, stats_train, stats_valid):
         "valid/oa1": stats_valid['oa1'].item(),
         "valid/mca1": stats_valid['mca1'].item(),
     })
-
 
 def get_distances(epoch, model, args, wandb):
     
@@ -483,7 +465,6 @@ def get_distances(epoch, model, args, wandb):
     # Plot distance matrix
     distance_mat = pairwise_distances(head_weights.cpu().numpy())
     sc_distance_mat = pairwise_distances(sc_weights.cpu().numpy())
-    
     plot_dist_matrix(distance_mat, epoch, wandb, args)
     plot_dist_matrix(sc_distance_mat, epoch, wandb, args)
     
@@ -507,7 +488,7 @@ def get_distances(epoch, model, args, wandb):
     #     "distance/inter_cluster_mammal": intra_cluster_1,
     #     "distance/inter_cluster_road_transport": intra_cluster_5,
     #     })
-    
+     
 # def plot_dist_matrix_sample(distance_mat, epoch, wandb, args, title):
     
 #     # distance_mat = distance_mat / np.sum(distance_mat, axis=0)
@@ -575,7 +556,8 @@ def plot_dist_matrix(distance_mat, epoch, wandb, args):
         # plt.savefig(os.path.join(args.path_weights,'sc_dist_{}.png'.format(epoch)), format='png', dpi=300)
         # np.savez(os.path.join(args.path_weights, 'sc_dist_{}.npz'.format(epoch)), data=distance_mat)
         wandb.log({"distance/sc_dist": wandb.Image(plt)})
+        
     plt.close()
-    
+
 if __name__ == '__main__':
     main()
