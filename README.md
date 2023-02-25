@@ -1,11 +1,11 @@
 # thesis-project
-
+<!-- 
 Deadline: \
 Final exam registration by 16 February 2023 \
 Exams' registration deadline 2 March 2023 \
 Thesis Upload 16 March 2023 \
 Final Exam 23 March 2023 \
-
+ -->
 Variables: \
 Level train_source: \
         - use 1 or 2 head method \
@@ -123,7 +123,7 @@ Afkar: kifech tnajem ta9na3 li il ta7asson sar 5atir il cluster mouch 5atir sar 
 - [x] Test 12 directions on resnet50 with the additions made by Sentry
 - [x] Explore Tensorboard / Weights and biases and choose which one to use > Wandb it is
 - [x] Analyze possible super-classes of the 40 chosen classes
-- [ ] Search other research papers that used the whole dataset for future approaches
+- [x] Search other research papers that used the whole dataset for future approaches
 - [ ] divide domainnet (full version) dataset in test/train as provided in the official website
 
 ### Important Logs
