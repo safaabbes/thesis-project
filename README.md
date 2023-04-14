@@ -19,7 +19,7 @@ Level test_pseudo: \
 Level train_pseudo: \
         - use 1 or 2 head method (independant from how many heads where used when making the train source) \
         
-Afkar: kifech tnajem ta9na3 li il ta7asson sar 5atir il cluster mouch 5atir sar basic multi-task strategy
+
 
 ### TODO List
 (10/01/2022)
